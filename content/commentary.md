@@ -1,7 +1,7 @@
 # How to read this model
-Updated: 2026-10-08
+Updated: 2026-10-09
 
-The model looks for stress building inside the stock market before it shows up in the index: groups of stocks decoupling from the S&P 500 (financial turbulence) and weakening breadth (internal turbulence). It turns those readings into the probability of a pullback of 3% or more.
+The model looks for stress building inside the stock market before it shows up in the index: groups of stocks decoupling from the S&P 500 (financial turbulence) and weakening breadth (internal turbulence). It also uses how much the index itself has been swinging over the past month (realized volatility). It turns those readings into the probability of a pullback of 3% or more.
 
 - **Compare the probability with the usual rate.** A 3% drop within a month is common, so a 30% reading for 21 days can still be below normal. The risk level compares today's probability with the long-run frequency.
 - **Treat it as a risk gauge, not a forecast of direction.** It says how likely a sharp dip is, not whether the market will be higher or lower next month.
