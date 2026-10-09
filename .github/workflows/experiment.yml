@@ -1,0 +1,36 @@
+name: Model experiment
+
+# Manual only: Actions -> Model experiment -> Run workflow. Compares model variants out of sample and
+# writes a results table to the run's summary page. It does not change the website or the data.
+on:
+  workflow_dispatch:
+    inputs:
+      runs:
+        description: "history_start:test_start pairs, comma-separated"
+        default: "2016-01-01:2020-01-01,2003-01-01:2008-01-01"
+
+permissions:
+  contents: read
+
+jobs:
+  experiment:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Compare model variants
+        env:
+          FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+          EXPERIMENT_RUNS: ${{ inputs.runs }}
+        run: python scripts/model_experiment.py
