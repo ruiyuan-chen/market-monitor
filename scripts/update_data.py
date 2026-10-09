@@ -452,6 +452,9 @@ def parse_fred_csv(text: str, sid: str = "") -> pd.Series:
 
 
 _FRED_CACHE: dict[str, pd.Series] = {}
+_FRED_STATE = {"failed_series": 0}
+FRED_BROWSER_HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+                        "Accept": "text/csv,text/plain,*/*"}
 
 
 def fred(sid: str, start: str = HISTORY_START) -> pd.Series:
@@ -470,7 +473,7 @@ def _fred_download(sid: str, start: str) -> pd.Series:
         def get():
             r = SESSION.get("https://api.stlouisfed.org/fred/series/observations",
                             params={"series_id": sid, "api_key": key, "file_type": "json",
-                                    "observation_start": start}, timeout=40)
+                                    "observation_start": start}, timeout=20)
             r.raise_for_status()
             obs = r.json()["observations"]
             s = pd.Series({pd.Timestamp(o["date"]): o["value"] for o in obs}, name=sid)
@@ -481,10 +484,20 @@ def _fred_download(sid: str, start: str) -> pd.Series:
     else:
         def get():
             r = SESSION.get("https://fred.stlouisfed.org/graph/fredgraph.csv",
-                            params={"id": sid, "cosd": start}, timeout=40)
+                            params={"id": sid, "cosd": start}, timeout=20, headers=FRED_BROWSER_HEADERS)
             r.raise_for_status()
             return parse_fred_csv(r.text, sid)
-    return retry(get, what=f"FRED {sid}")
+    # If FRED stops answering (it sometimes ignores cloud servers), give up quickly instead of timing out on every series.
+    if _FRED_STATE["failed_series"] >= 2:
+        raise RuntimeError("FRED is not responding from this server, so the remaining FRED series were skipped. "
+                           "Adding a free FRED_API_KEY repository secret usually fixes this (see README).")
+    try:
+        s = retry(get, tries=2, wait=3, what=f"FRED {sid}")
+    except Exception:
+        _FRED_STATE["failed_series"] += 1
+        raise
+    _FRED_STATE["failed_series"] = 0
+    return s
 
 
 def recession_periods(usrec: pd.Series) -> list[list[str]]:
