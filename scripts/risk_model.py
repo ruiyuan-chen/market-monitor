@@ -9,6 +9,8 @@ What it does
        - "financial turbulence": how decoupled each cluster is from the S&P 500 (rolling 21-day
          regression residual volatility x sqrt(1 - correlation)), summarized by an expanding PCA
        - "internal turbulence": the average z-score of six market-breadth measures
+       - realized volatility: the annualized standard deviation of the last 21 daily S&P 500 returns
+         (added Oct 2026; the notebook did not use it)
   3. Labels each day 1 if the S&P 500 closes at least 3% below that day's close at some point in the
      next 5 (or 21) trading days.
   4. Evaluates the model out of sample: walk forward one month at a time, re-forming the clusters and
@@ -27,6 +29,8 @@ Differences from the notebook (README, "Risk model", explains each):
     (percent changes of a series that crosses zero blow up).
   - The last 5/21 days have no label yet (the notebook labeled them 0).
   - Logistic regression without resampling, so the probabilities are calibrated.
+  - Realized volatility (RV21) is an extra feature. Alone it beat the notebook's six features out of
+    sample, so the model now uses both; the scorecard still compares against volatility alone.
 
 Local run on a CSV in the notebook's format (Date, Close, Volume, Company):
   RISK_MODEL_PRICES_CSV=stock_details_5_years.csv RISK_MODEL_SPX_CSV=spx.csv python scripts/risk_model.py
@@ -66,7 +70,7 @@ CONFIG = {
     "pc_change": "diff",             # "diff" (default) or "pct" (the notebook's percent change)
     "lookback_hl": 252, "ma_short": 50, "ma_long": 200, "z_win": 252, "min_names": 50,
     "horizons": {"5d": (5, -0.03), "21d": (21, -0.03)},
-    "features": ["PC1", "PC2", "PC1_Change", "PC2_Change", "TurbScalar", "InternalTurbulence"],
+    "features": ["PC1", "PC2", "PC1_Change", "PC2_Change", "TurbScalar", "InternalTurbulence", "RV21"],
     "refit_every": 21,               # walk-forward block length (about one month)
     "history_years_on_site": 6,      # out-of-sample history sent to the website
 }
@@ -465,7 +469,8 @@ def build_model(cfg: dict = CONFIG) -> dict:
                             ("XSec_Vol", "Dispersion of daily returns across stocks", "pct")]:
         v = float(br[key].iloc[-1])
         internals.append({"key": key, "label": label, "value": v, "format": fmt, "percentile": pctile(br[key], v)})
-    for key, s, fmt in [("InternalTurbulence", it["InternalTurbulence"], "z"), ("TurbScalar", F["TurbScalar"], "num")]:
+    for key, s, fmt in [("InternalTurbulence", it["InternalTurbulence"], "z"), ("TurbScalar", F["TurbScalar"], "num"),
+                        ("RV21", prep["rv"].loc[:asof], "pct")]:
         v = float(s.dropna().iloc[-1])
         internals.append({"key": key, "label": FEATURE_INFO[key][0], "value": v, "format": fmt, "percentile": pctile(s, v)})
 
@@ -479,7 +484,7 @@ def build_model(cfg: dict = CONFIG) -> dict:
         "indicators": {"internalTurbulence": pairs(it["InternalTurbulence"].loc[start_hist:], 3),
                        "pctAbove200": pairs(br["Pct_Above200"].loc[start_hist:], 4)},
         "model": {
-            "name": "Logistic regression on market-turbulence features",
+            "name": "Logistic regression on market-turbulence, breadth and volatility features",
             "features": [{"key": f, "label": FEATURE_INFO[f][0], "description": FEATURE_INFO[f][1]} for f in cfg["features"]],
             "universe": int(close.shape[1]), "clusters": int(live_clusters.nunique()), "clusterYears": cfg["cluster_years"],
             "evalStart": cfg["eval_start"], "refitEvery": cfg["refit_every"],
