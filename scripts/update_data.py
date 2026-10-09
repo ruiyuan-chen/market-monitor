@@ -383,7 +383,8 @@ def build_markets() -> dict:
         "history": [[i.strftime("%Y-%m-%d"), rnd(v, 2)] for i, v in ten.items()],
     }
 
-    asof = max(p["date"] for p in indices)
+    # "as of" = the S&P 500's last close (the VIX and futures can show a pre-market row for today)
+    asof = next((p["date"] for p in indices if p["symbol"] == "^GSPC"), max(p["date"] for p in indices))
     return {"asof": asof, "indices": indices, "sectors": sectors, "benchmark": bench,
             "cross": cross, "spx": spx_block}
 
