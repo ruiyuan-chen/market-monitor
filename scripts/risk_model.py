@@ -18,8 +18,9 @@ What it does
      baseline.
   5. Re-forms the clusters as of today, fits the model on all labeled history and predicts today.
 
-Output: data/model.json (read by the website) and data/model_log.json (append-only record of each
-day's live prediction, scored once the outcome is known).
+Output: data/model.json (read by the website), data/model_log.json (append-only record of each
+day's live prediction, scored once the outcome is known) and data/model_oos.json (every out-of-sample
+prediction since eval_start, used by scripts/backtest.py).
 
 Differences from the notebook (README, "Risk model", explains each):
   - Clusters are formed from the trailing two years of returns as of each date, never from the full
@@ -456,6 +457,19 @@ def build_model(cfg: dict = CONFIG) -> dict:
         ev = horizons[name]["evaluation"]
         log(f"  {name}: today {p_now:.3f} (base {base_rate:.3f}) | out-of-sample AUC {ev['model'].get('auc', float('nan')):.3f}"
             f" vs volatility baseline {ev['volBaseline'].get('auc', float('nan')):.3f}")
+
+    # full out-of-sample record for scripts/backtest.py (the website's history is trimmed to a few years)
+    ev_mask = X.index >= pd.Timestamp(cfg["eval_start"])
+    oos = {"asof": asof.strftime("%Y-%m-%d"), "evalStart": cfg["eval_start"],
+           "baseRates": {name: horizons[name]["baseRate"] for name in horizons},
+           "dates": [d.strftime("%Y-%m-%d") for d in X.index[ev_mask]],
+           "spx": [round(float(v), 2) for v in spx_f[ev_mask]]}
+    for name in cfg["horizons"]:
+        oos[f"p_{name}"] = [None if pd.isna(v) else round(float(v), 4) for v in wf["model"][name][ev_mask]]
+        oos[f"b_{name}"] = [None if pd.isna(v) else round(float(v), 4) for v in wf["baseline"][name][ev_mask]]
+        oos[f"y_{name}"] = [None if pd.isna(v) else int(v) for v in labels[name][ev_mask]]
+    DATA.mkdir(parents=True, exist_ok=True)
+    (DATA / "model_oos.json").write_text(json.dumps(oos, separators=(",", ":")))
 
     br, it = prep["breadth"].loc[:asof], prep["internal"].loc[:asof]
     pctile = lambda s, v: float((s.dropna() <= v).mean()) if s.notna().any() else None
