@@ -1,0 +1,51 @@
+name: Strategy backtest
+
+# Manual only: Actions -> Strategy backtest -> Run workflow. Simulates simple trading rules on the
+# model's out-of-sample predictions and writes the results to the run's summary page. It does not
+# change the website or the data. Run "Update market data" at least once first so that
+# data/model_oos.json exists.
+on:
+  workflow_dispatch:
+    inputs:
+      cost_bps:
+        description: "Trading cost per dollar traded, one way, in basis points (5 = 0.05%)"
+        default: "5"
+      tax_rate:
+        description: "Tax rate on short-term realized gains, percent"
+        default: "30"
+      vol_target:
+        description: "Volatility target for the vol-targeting rules, percent"
+        default: "15"
+
+permissions:
+  contents: read
+
+jobs:
+  backtest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt matplotlib
+
+      - name: Simulate the trading rules
+        env:
+          COST_BPS: ${{ inputs.cost_bps }}
+          TAX_RATE: ${{ inputs.tax_rate }}
+          VOL_TARGET: ${{ inputs.vol_target }}
+        run: python scripts/backtest.py
+
+      - name: Save the chart and daily series
+        uses: actions/upload-artifact@v4
+        with:
+          name: backtest-results
+          path: backtest_out/
