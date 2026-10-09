@@ -174,7 +174,7 @@
         <div class="table-wrap" id="risk-calib"></div>
       </article>
       <article class="panel">
-        <div class="panel-head"><div><h3 class="panel-title">Market internals</h3><p class="panel-sub">Breadth and turbulence inputs, ranked against their own history</p></div></div>
+        <div class="panel-head"><div><h3 class="panel-title">Market internals</h3><p class="panel-sub">Breadth, turbulence and volatility inputs, ranked against their own history</p></div></div>
         <div class="table-wrap" id="risk-internals"></div>
       </article>
     </div>
@@ -184,7 +184,7 @@
       <div class="learn-body">
         <div>
           <h4>The inputs</h4>
-          <p>About 490 large U.S.-listed stocks are grouped into 10 clusters of stocks that move together, using two years of daily returns. <em>Financial turbulence</em> measures how far each cluster has decoupled from the S&amp;P 500 over the past month: the leftover volatility of a regression of the index on the cluster, scaled by how weakly they correlate. <em>Internal turbulence</em> averages six breadth signals: new 52-week lows, the share of stocks below their 50- and 200-day averages, decliners, the Arms index and the dispersion of returns.</p>
+          <p>About 490 large U.S.-listed stocks are grouped into 10 clusters of stocks that move together, using two years of daily returns. <em>Financial turbulence</em> measures how far each cluster has decoupled from the S&amp;P 500 over the past month: the leftover volatility of a regression of the index on the cluster, scaled by how weakly they correlate. <em>Internal turbulence</em> averages six breadth signals: new 52-week lows, the share of stocks below their 50- and 200-day averages, decliners, the Arms index and the dispersion of returns. <em>Realized volatility</em> is how much the S&amp;P 500 itself has moved over the past month, annualized.</p>
         </div>
         <div>
           <h4>The model</h4>
@@ -194,7 +194,7 @@
         </div>
         <div>
           <h4>Reading the scorecard</h4>
-          <p><em>AUC</em> is the chance that a randomly chosen day before a drawdown gets a higher probability than a randomly chosen calm day; 0.5 is a coin flip. <em>Brier skill</em> compares the probabilities with always predicting the usual rate: above zero is better. The <em>baseline</em> uses only the past month's volatility, a strong and simple benchmark because volatility clusters.</p>
+          <p><em>AUC</em> is the chance that a randomly chosen day before a drawdown gets a higher probability than a randomly chosen calm day; 0.5 is a coin flip. <em>Brier skill</em> compares the probabilities with always predicting the usual rate: above zero is better. The <em>baseline</em> uses only the past month's volatility, a strong and simple benchmark because volatility clusters. The model includes that same measure, so beating the baseline means the turbulence and breadth inputs add something volatility alone does not.</p>
           <h4>Limits</h4>
           <p>Large drawdowns are rare and overlapping windows mean far fewer independent events than days, so the scores are noisy. The stock list is today's large companies, which adds survivorship bias to the history. This is a teaching and research tool, not investment advice.</p>
         </div>
