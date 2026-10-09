@@ -79,10 +79,13 @@ No server, no database and no paid API. If one source fails, that section keeps 
 | `model/universe.txt` | The ~490 stock tickers the model uses (one per line) |
 | `content/commentary.md` | **Your evaluation**, shown beside the model's signal. Edit it on GitHub whenever you like |
 | `data/model_log.json` | Append-only record of each day's live prediction, scored once the outcome is known |
+| `data/model_oos.json` | Every out-of-sample prediction since 2020 (model and volatility baseline), used by the backtest |
 | `data/*.json` | The data the page reads (written by the workflow; don't edit by hand) |
 | `.github/workflows/update.yml` | The schedule: fetch → commit → publish |
 | `scripts/model_experiment.py` | Compares model variants (feature sets, history length) out of sample; run from Actions |
 | `.github/workflows/experiment.yml` | The manual **Model experiment** workflow |
+| `scripts/backtest.py` | Simulates simple trading rules on the model's out-of-sample predictions; run from Actions |
+| `.github/workflows/backtest.yml` | The manual **Strategy backtest** workflow |
 | `tests/` | Offline tests for the data parsers and the model |
 
 ## Risk model
@@ -130,6 +133,8 @@ RISK_MODEL_PRICES_CSV=stock_details_5_years.csv RISK_MODEL_SPX_CSV=spx.csv pytho
 `spx.csv` needs two columns, a date and the S&P 500 close (FRED's `SP500` download works).
 
 **Experiments.** To compare variants without touching the site, open **Actions → Model experiment → Run workflow**. By default it tests the notebook's features, the live model (with RV21), adding the VIX, and VIX or RV21 alone, first on the live setup (daily data since 2016, tested from 2020) and then on a longer history (daily data since 2003, tested from 2008). The results table, with block-bootstrap ranges for each AUC difference, appears on the run's summary page after about 15–20 minutes. Edit `VARIANTS` in `scripts/model_experiment.py` to try other features.
+
+**Strategy backtest.** To see what trading on the model would have done, open **Actions → Strategy backtest → Run workflow** (after the daily update has run at least once). It simulates buy and hold, the model's risk levels as in-or-out and scaled-exposure rules, the volatility-only model, VIX thresholds and volatility targeting, all long-only with trading costs and a simple tax treatment, and reports returns, drawdowns, trade counts and a bootstrap range for each rule's gap to buy and hold. The results appear on the run's summary page in about two minutes; the chart and daily series are in the run's artifact. The cost, tax rate and volatility target are inputs on the Run workflow form. This is a study tool, not investment advice.
 
 **Your evaluation** lives in `content/commentary.md`. On GitHub, open the file, click the pencil icon,
 edit, and commit. The site picks it up within a minute. It supports a `# Title` line, an
