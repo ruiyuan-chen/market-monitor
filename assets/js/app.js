@@ -166,7 +166,13 @@
         c.strokeStyle = css("--ink-2"); c.globalAlpha = 0.7; c.lineWidth = 1; c.setLineDash([4, 3]);
         c.beginPath(); c.moveTo(left, Math.round(y) + 0.5); c.lineTo(right, Math.round(y) + 0.5); c.stroke();
         c.setLineDash([]); c.globalAlpha = 1;
-        if (ln.label) { c.font = `12px ${css("--font-sans")}`; c.fillStyle = css("--ink-2"); c.textBaseline = "bottom"; c.fillText(ln.label, left + 6, y - 3); }
+        if (ln.label) {
+          c.font = `12px ${css("--font-sans")}`;
+          const w = c.measureText(ln.label).width, h = 16;
+          let ty = y - 3 - h; if (ty < top) ty = y + 3;
+          c.fillStyle = css("--surface"); c.globalAlpha = 0.88; c.fillRect(left + 2, ty, w + 8, h); c.globalAlpha = 1;
+          c.fillStyle = css("--ink-2"); c.textBaseline = "middle"; c.fillText(ln.label, left + 6, ty + h / 2 + 0.5);
+        }
       }
       c.restore();
     },
