@@ -81,6 +81,8 @@ No server, no database and no paid API. If one source fails, that section keeps 
 | `data/model_log.json` | Append-only record of each day's live prediction, scored once the outcome is known |
 | `data/*.json` | The data the page reads (written by the workflow; don't edit by hand) |
 | `.github/workflows/update.yml` | The schedule: fetch → commit → publish |
+| `scripts/model_experiment.py` | Compares model variants (feature sets, history length) out of sample; run from Actions |
+| `.github/workflows/experiment.yml` | The manual **Model experiment** workflow |
 | `tests/` | Offline tests for the data parsers and the model |
 
 ## Risk model
@@ -96,6 +98,7 @@ shows the code, only the results.
 2. *Financial turbulence*: for each cluster, the residual volatility of a 21-day regression of the S&P 500
    on the cluster, times sqrt(1 − correlation). An expanding PCA of these signals gives PC1/PC2.
 3. *Internal turbulence*: the average 252-day z-score of six breadth measures.
+   *Realized volatility* (RV21): the annualized standard deviation of the last 21 daily S&P 500 returns.
 4. Target: the S&P 500 closes at least 3% below today's close within the next 5 (or 21) trading days.
 5. Logistic regression, refit every day on all labeled history.
 
@@ -112,6 +115,7 @@ returns, turbulence signals, breadth measures and internal turbulence match to m
 | Logistic regression with no resampling | SMOTE/oversampling inflates the probabilities (Brier score about 65% worse), which matters once a probability is shown on a website |
 | PC changes are first differences, signs kept consistent | The percent change of a series that crosses zero reaches ±18 to ±30 in the sample |
 | Correlations use pairwise-complete data | Filling missing returns with 0 shrinks the correlations of recently listed stocks |
+| Realized volatility (RV21) is added as a seventh feature (Oct 2026) | Out of sample, volatility alone beat the six turbulence features (5-day AUC 0.67 vs 0.64). The scorecard still compares the model with volatility alone, so it shows whether the other features add anything |
 
 **Settings** are in the `CONFIG` block at the top of `scripts/risk_model.py`: the history start, the
 out-of-sample start, the horizons and thresholds, the feature list, and `"pc_change": "pct"` to restore
@@ -124,6 +128,8 @@ RISK_MODEL_PRICES_CSV=stock_details_5_years.csv RISK_MODEL_SPX_CSV=spx.csv pytho
 ```
 
 `spx.csv` needs two columns, a date and the S&P 500 close (FRED's `SP500` download works).
+
+**Experiments.** To compare variants without touching the site, open **Actions → Model experiment → Run workflow**. By default it tests the notebook's features, the live model (with RV21), adding the VIX, and VIX or RV21 alone, first on the live setup (daily data since 2016, tested from 2020) and then on a longer history (daily data since 2003, tested from 2008). The results table, with block-bootstrap ranges for each AUC difference, appears on the run's summary page after about 15–20 minutes. Edit `VARIANTS` in `scripts/model_experiment.py` to try other features.
 
 **Your evaluation** lives in `content/commentary.md`. On GitHub, open the file, click the pencil icon,
 edit, and commit. The site picks it up within a minute. It supports a `# Title` line, an
