@@ -888,7 +888,7 @@
     const m0 = mdl.model || {}, h0 = H[keys[0]];
     const live = (mdl.liveLog || []).filter((e) => e.date);
     $("#risk-foot").replaceChildren(...[
-      el("span", null, `Logistic regression on ${(m0.features || []).length} turbulence features from ${m0.universe || "–"} stocks in ${m0.clusters || "–"} clusters`),
+      el("span", null, `Logistic regression on ${(m0.features || []).length} inputs: turbulence and breadth from ${m0.universe || "–"} stocks in ${m0.clusters || "–"} clusters, plus S&P 500 volatility`),
       el("span", null, `Trained on ${fmtNum(h0.trainDays, 0)} days since ${fmtDate(ts(m0.featureStart || mdl.history.dates[0]), "month")}`),
       live.length > 1 ? el("span", null, `Live estimates logged daily since ${fmtDate(ts(live[0].date))}`) : null,
       el("span", null, "Levels compare the estimate with the usual rate: below 0.75× low, up to 1.25× normal, up to 2× elevated, above that high.")].filter(Boolean));
