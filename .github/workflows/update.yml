@@ -1,0 +1,73 @@
+name: Update market data
+
+on:
+  schedule:
+    # 21:30 UTC on weekdays = 5:30 pm EDT / 4:30 pm EST, after the 4 pm close.
+    # GitHub sometimes starts scheduled runs 5-30 minutes late; that's normal.
+    - cron: "30 21 * * 1-5"
+  workflow_dispatch:      # adds a "Run workflow" button in the Actions tab
+  push:
+    branches: [main]      # redeploy (without refetching) whenever you edit the site
+
+permissions:
+  contents: write         # commit the refreshed data/ files
+  pages: write            # publish to GitHub Pages
+  id-token: write
+
+concurrency:
+  group: market-monitor
+  cancel-in-progress: false
+
+jobs:
+  update-and-deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        if: github.event_name != 'push'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        if: github.event_name != 'push'
+        run: pip install -r requirements.txt
+
+      - name: Fetch the latest data
+        if: github.event_name != 'push'
+        env:
+          FRED_API_KEY: ${{ secrets.FRED_API_KEY }}   # optional; leave unset to use FRED's public CSV links
+        run: python scripts/update_data.py
+
+      - name: Save the data in the repository
+        if: github.event_name != 'push'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/
+          if git diff --staged --quiet; then
+            echo "No data changes."
+          else
+            git commit -m "Data update $(date -u +'%Y-%m-%d %H:%M UTC')"
+            git pull --rebase --autostash
+            git push
+          fi
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Package the site
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
+
+      - name: Publish to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
