@@ -95,6 +95,11 @@ h1, h2, h3, h4 { line-height: 1.2; margin: 0; text-wrap: balance; }
 .mast-top { display: flex; justify-content: space-between; align-items: flex-end; gap: 14px 24px; flex-wrap: wrap; padding-block: 22px 18px; }
 .eyebrow { font-size: 11.5px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--navy-ink-2); margin-bottom: 6px; }
 .masthead h1 { font-family: var(--font-serif); font-weight: 700; font-size: 32px; letter-spacing: -0.01em; }
+.masthead h1 a { color: inherit; text-decoration: none; }
+.mast-link { color: var(--navy-ink-2); font-size: 13px; white-space: nowrap; text-decoration: none; padding: 6px 2px; border-bottom: 1px solid transparent; }
+.mast-link:hover, .mast-link.active { color: var(--navy-ink); border-bottom-color: var(--navy-ink-2); }
+.skip-link { position: absolute; left: 12px; top: -48px; z-index: 50; background: var(--surface); color: var(--ink); padding: 8px 12px; border-radius: 4px; }
+.skip-link:focus { top: 12px; }
 .tagline { margin: 6px 0 0; color: var(--navy-ink-2); font-size: 14px; max-width: 62ch; }
 .mast-meta { display: flex; align-items: center; gap: 12px; }
 .asof { font-size: 13px; color: var(--navy-ink-2); text-align: right; line-height: 1.4; }
@@ -289,6 +294,7 @@ details.learn > summary .tag { font-size: 11px; font-weight: 600; letter-spacing
 footer.site-foot { background: var(--navy); color: var(--navy-ink-2); padding-block: 20px 28px; font-size: 13px; }
 footer.site-foot p { margin: 4px 0; }
 footer.site-foot a { color: var(--navy-ink); }
+footer.site-foot .foot-links { color: var(--navy-ink-2); }
 
 
 /* ---------- risk model ---------- */
@@ -328,6 +334,19 @@ footer.site-foot a { color: var(--navy-ink); }
 .pbar span.track i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 2px; background: var(--ink-2); }
 .key.shade.event { background: var(--event); }
 td.best { font-weight: 600; color: var(--ink); }
+.model-name, .th-model { display: inline-flex; align-items: center; gap: 8px; }
+.model-name { font-weight: 600; color: var(--ink); }
+.th-model { justify-content: flex-end; }
+th .th-sub { display: block; font-size: 11px; font-weight: 400; letter-spacing: 0; text-transform: none; margin-top: 2px; }
+th.cur, td.cur { background: var(--surface-2); }
+.models-table td { vertical-align: middle; padding-block: 12px; }
+.models-table td.model-cell { white-space: normal; min-width: 210px; }
+td.reading .prob { font-family: var(--font-serif); font-size: 22px; font-weight: 700; color: var(--ink); margin-right: 10px; vertical-align: middle; }
+td.reading .chip { vertical-align: middle; }
+td.reading .sub { margin-top: 4px; }
+.bt-table th { white-space: normal; vertical-align: bottom; min-width: 76px; }
+.bt-table th:first-child { min-width: 200px; }
+.grid.align-start { align-items: start; }
 
 /* ---------- small screens ---------- */
 @media (max-width: 700px) {
@@ -351,6 +370,12 @@ td.best { font-weight: 600; color: var(--ink); }
   .signal:first-child { border-top: 0; }
   .signal .v { font-size: 38px; }
   .drv { grid-template-columns: minmax(100px, 1fr) minmax(90px, 1fr) 54px; }
+  .models-table td.model-cell { min-width: 0; width: 34%; }
+  .models-table td.model-cell .sub { display: none; }
+  td.reading { white-space: normal; }
+  td.reading .prob { display: block; margin: 0 0 6px; font-size: 19px; }
+  td.reading .chip { font-size: 10.5px; padding: 2px 6px 2px 5px; white-space: nowrap; letter-spacing: .02em; }
+  td.reading .sub { font-size: 11px; }
 }
 
 @media print {
