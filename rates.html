@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Interest rates · Market Monitor</title>
+<meta name="description" content="Fed policy rate, the Treasury yield curve, real yields, breakevens, credit spreads and mortgage rates.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%230f2742'/%3E%3Cpath d='M6 22l6-7 5 4 9-11' fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,600;8..60,700&display=swap">
+<link rel="stylesheet" href="assets/css/style.css">
+<script>try{var t=localStorage.getItem("mm-theme");if(t)document.documentElement.setAttribute("data-theme",t);}catch(e){}</script>
+</head>
+<body data-page="rates">
+<script src="assets/js/shell.js"></script>
+
+<main class="wrap" id="main">
+  <section id="rates" class="section" aria-labelledby="h-rates">
+    <div class="section-head">
+      <div>
+        <h2 id="h-rates">Interest rates</h2>
+        <p class="lede">Fed policy, Treasury yields and credit spreads. Changes are in basis points (1 bp = 0.01 percentage point).</p>
+      </div>
+    </div>
+    <div class="grid g-5-7">
+      <article class="panel">
+        <div class="panel-head"><div><h3 class="panel-title">Rates board</h3><p class="panel-sub" id="rates-sub">Latest daily values · mortgage rate is a weekly survey</p></div></div>
+        <div class="table-wrap" id="rate-table"></div>
+      </article>
+      <article class="panel">
+        <div class="panel-head"><div><h3 class="panel-title">Treasury yield curve</h3><p class="panel-sub" id="curve-sub">Yield by maturity</p></div></div>
+        <div class="panel-body">
+          <ul class="legend" id="curve-legend"></ul>
+          <div class="chart-box"><canvas id="curve-chart" role="img" aria-label="Treasury yield curve today compared with one month and one year ago"></canvas></div>
+          <details class="datatable" data-chart="curve-chart"><summary>Data table and CSV download</summary><div class="dt-body"></div></details>
+        </div>
+      </article>
+    </div>
+    <div class="grid g-6-6">
+      <article class="panel">
+        <div class="panel-head">
+          <div><h3 class="panel-title">Policy rate and Treasury yields</h3><p class="panel-sub">Percent · shaded bands are U.S. recessions (NBER)</p></div>
+          <div class="controls">
+            <div class="range" role="group" aria-label="Range for both rate charts" data-range="rates">
+              <button type="button" data-r="1Y">1Y</button><button type="button" data-r="3Y">3Y</button><button type="button" data-r="10Y" aria-pressed="true">10Y</button><button type="button" data-r="30Y">30Y</button><button type="button" data-r="MAX">Max</button>
+            </div>
+          </div>
+        </div>
+        <div class="panel-body">
+          <ul class="legend" id="rates-legend"></ul>
+          <div class="chart-box"><canvas id="rates-chart" role="img" aria-label="Federal funds rate and Treasury yields over time"></canvas></div>
+          <details class="datatable" data-chart="rates-chart"><summary>Data table and CSV download</summary><div class="dt-body"></div></details>
+        </div>
+      </article>
+      <article class="panel">
+        <div class="panel-head"><div><h3 class="panel-title">Yield-curve slope</h3><p class="panel-sub">Long minus short yields, percentage points · below zero = inverted · same range as the chart at left</p></div></div>
+        <div class="panel-body">
+          <ul class="legend" id="spread-legend"></ul>
+          <div class="chart-box"><canvas id="spread-chart" role="img" aria-label="Yield curve spreads over time with recessions shaded"></canvas></div>
+          <details class="datatable" data-chart="spread-chart"><summary>Data table and CSV download</summary><div class="dt-body"></div></details>
+        </div>
+      </article>
+    </div>
+
+    <details class="learn">
+      <summary><span class="tag">Teaching notes</span> Yield curves, real rates and spreads</summary>
+      <div class="learn-body">
+        <div>
+          <h4>The federal funds rate</h4>
+          <p>The Federal Reserve's policy rate is the overnight rate at which banks lend reserves to one another. The Fed sets a target range, and the effective rate shown here trades inside it. Short-term Treasury bill yields follow it closely.</p>
+          <h4>The yield curve</h4>
+          <p>The curve plots Treasury yields against maturity. It usually slopes upward because investors want extra yield to lock money up for longer (the <em>term premium</em>) and because markets expect rates to rise over time.</p>
+        </div>
+        <div>
+          <h4>Inversions and recessions</h4>
+          <p>When short rates exceed long rates (a negative spread), the curve is "inverted". This usually means markets expect the Fed to cut rates as the economy weakens. The 10-year minus 3-month spread turned negative before every U.S. recession since the late 1960s, though the lead time varies and it has given false alarms.</p>
+        </div>
+        <div>
+          <h4>Real yields and breakevens</h4>
+          <p>TIPS pay a <em>real</em> (inflation-adjusted) yield. The nominal 10-year yield minus the TIPS yield is the <em>breakeven</em> inflation rate, a market-based gauge of expected inflation that also includes some risk premia.</p>
+          <h4>Credit spreads</h4>
+          <p>The high-yield spread is the extra yield on below-investment-grade ("junk") corporate bonds over Treasuries. It widens when investors fear defaults and is a useful gauge of financial stress.</p>
+        </div>
+      </div>
+    </details>
+  </section>
+</main>
+
+<script src="assets/vendor/chart.umd.min.js"></script>
+<script src="assets/js/config.js"></script>
+<script src="assets/js/app.js"></script>
+</body>
+</html>
