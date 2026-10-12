@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Sectors · Market Monitor</title>
+<meta name="description" content="Returns of the 11 S&amp;P 500 sectors, from one day to one year.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%230f2742'/%3E%3Cpath d='M6 22l6-7 5 4 9-11' fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,600;8..60,700&display=swap">
+<link rel="stylesheet" href="assets/css/style.css">
+<script>try{var t=localStorage.getItem("mm-theme");if(t)document.documentElement.setAttribute("data-theme",t);}catch(e){}</script>
+</head>
+<body data-page="sectors">
+<script src="assets/js/shell.js"></script>
+
+<main class="wrap" id="main">
+  <section id="sectors" class="section" aria-labelledby="h-sectors">
+    <div class="section-head">
+      <div>
+        <h2 id="h-sectors">Sector performance</h2>
+        <p class="lede">Total returns, including dividends, of the 11 S&amp;P 500 sectors, measured with the Select Sector SPDR funds. Click a column heading to sort.</p>
+      </div>
+    </div>
+    <article class="panel">
+      <div class="table-wrap" id="sector-table"></div>
+      <div class="panel-foot heat-legend" id="heat-legend"></div>
+    </article>
+
+    <details class="learn">
+      <summary><span class="tag">Teaching notes</span> Sectors and the business cycle</summary>
+      <div class="learn-body">
+        <div>
+          <h4>The 11 sectors</h4>
+          <p>S&amp;P and MSCI sort companies into sectors under the Global Industry Classification Standard (GICS), based on how each company earns most of its revenue. Each sector fund here holds the S&amp;P 500 members in that sector, weighted by market value.</p>
+        </div>
+        <div>
+          <h4>Cyclical vs. defensive</h4>
+          <p>Cyclical sectors (Consumer Discretionary, Industrials, Financials, Materials, Energy) are more sensitive to economic growth. Defensive sectors (Consumer Staples, Utilities, Health Care) sell things people buy in any economy. Comparing the two groups shows what the market expects about growth.</p>
+        </div>
+        <div>
+          <h4>Rates matter too</h4>
+          <p>Utilities and Real Estate pay steady cash flows and often trade like bonds, so they tend to fall when interest rates rise. Financials, especially banks, can benefit from a steeper yield curve.</p>
+        </div>
+      </div>
+    </details>
+  </section>
+</main>
+
+<script src="assets/vendor/chart.umd.min.js"></script>
+<script src="assets/js/config.js"></script>
+<script src="assets/js/app.js"></script>
+</body>
+</html>
