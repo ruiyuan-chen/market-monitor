@@ -47,7 +47,7 @@
   --st-low: #0d7a3e; --st-normal: #687586; --st-elevated: #b26a00; --st-high: #c0262d;
 
   --font-sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
-  --font-serif: "Source Serif 4", Georgia, "Times New Roman", serif;
+  --font-serif: "EB Garamond", Garamond, "Iowan Old Style", Georgia, serif;
   --font: var(--font-sans);
   --radius: 6px;
 }
@@ -348,6 +348,33 @@ td.reading .sub { margin-top: 4px; }
 .bt-table th:first-child { min-width: 200px; }
 .grid.align-start { align-items: start; }
 
+/* ---------- typography ----------
+   EB Garamond (as on the author's academic site) for headings, the tab bar and prose;
+   IBM Plex Sans stays on tables, numbers, charts and controls so figures line up. */
+.masthead h1 { font-weight: 500; font-size: 38px; letter-spacing: 0; }
+.eyebrow { font-family: var(--font-serif); font-size: 13px; font-weight: 500; letter-spacing: .14em; }
+.tagline { font-family: var(--font-serif); font-size: 17px; line-height: 1.45; }
+.mast-link { font-family: var(--font-serif); font-size: 16px; }
+.secnav a { font-family: var(--font-serif); font-size: 16.5px; font-weight: 500; padding: 11px 11px 9px; }
+.section-head h2 { font-weight: 500; font-size: 32px; letter-spacing: 0; }
+.lede { font-family: var(--font-serif); font-size: 17.5px; line-height: 1.5; }
+.notice { font-family: var(--font-serif); font-size: 16px; }
+.panel-title { font-family: var(--font-serif); font-size: 14px; font-weight: 600; letter-spacing: .12em; }
+.panel-sub { font-family: var(--font-serif); font-size: 15px; }
+.panel-foot { font-family: var(--font-serif); font-size: 14.5px; }
+.empty { font-family: var(--font-serif); font-size: 16px; }
+details.learn > summary { font-family: var(--font-serif); font-size: 17px; font-weight: 500; }
+details.learn > summary .tag { font-size: 12.5px; letter-spacing: .12em; }
+.learn-body h4 { font-weight: 600; font-size: 18.5px; }
+.learn-body p { font-family: var(--font-serif); font-size: 16.5px; line-height: 1.5; }
+.learn-body .refs { font-size: 14.5px; }
+.about-grid h3 { font-weight: 600; font-size: 20px; }
+.about-grid p, .about-grid li { font-family: var(--font-serif); font-size: 16.5px; }
+.commentary h4 { font-weight: 600; font-size: 21px; }
+.commentary p, .commentary ul { font-family: var(--font-serif); font-size: 16.5px; line-height: 1.5; }
+footer.site-foot { font-family: var(--font-serif); font-size: 15.5px; }
+.signal .v, td.reading .prob { font-weight: 600; font-variant-numeric: lining-nums; }
+td.reading .prob { font-size: 25px; }
 /* ---------- small screens ---------- */
 @media (max-width: 700px) {
   body { font-size: 14px; }
@@ -381,4 +408,13 @@ td.reading .sub { margin-top: 4px; }
 @media print {
   .secnav, .icon-btn, .controls, details.datatable { display: none !important; }
   details.learn { break-inside: avoid; }
+}
+
+/* typography on small screens (after the block above so these sizes win) */
+@media (max-width: 700px) {
+  .masthead h1 { font-size: 30px; }
+  .section-head h2 { font-size: 26px; }
+  .tagline { font-size: 16px; }
+  .lede { font-size: 16.5px; }
+  .secnav a { font-size: 15.5px; }
 }
