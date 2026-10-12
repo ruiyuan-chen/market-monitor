@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Sectors · Market Monitor</title>
-<meta name="description" content="Returns of the 11 S&amp;P 500 sectors, from one day to one year.">
+<title>Sectors and largest firms · Market Monitor</title>
+<meta name="description" content="Returns of the 11 S&amp;P 500 sectors and the 20 largest U.S. companies, with valuation ratios and 52-week ranges.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%230f2742'/%3E%3Cpath d='M6 22l6-7 5 4 9-11' fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -42,6 +42,41 @@
         <div>
           <h4>Rates matter too</h4>
           <p>Utilities and Real Estate pay steady cash flows and often trade like bonds, so they tend to fall when interest rates rise. Financials, especially banks, can benefit from a steeper yield curve.</p>
+        </div>
+      </div>
+    </details>
+  </section>
+
+  <section id="firms" class="section" aria-labelledby="h-firms">
+    <div class="section-head">
+      <div>
+        <h2 id="h-firms">Largest U.S. companies</h2>
+        <p class="lede">The 20 most valuable U.S.-listed companies, ranked by market capitalization. Click a column heading to sort.</p>
+      </div>
+    </div>
+    <article class="panel">
+      <div class="keyfigs" id="firm-keyfigs"></div>
+      <div class="table-wrap" id="firm-table"></div>
+    </article>
+
+    <details class="learn">
+      <summary><span class="tag">Teaching notes</span> Market cap, P/E and concentration</summary>
+      <div class="learn-body">
+        <div>
+          <h4>Market capitalization</h4>
+          <p>Share price × shares outstanding, the stock market's valuation of the whole company's equity. Index weights in the S&amp;P 500 are based on market cap, adjusted for shares that actually trade (the "float").</p>
+          <h4>Concentration</h4>
+          <p>A handful of very large firms now make up a large share of the S&amp;P 500's value, so their returns can dominate the index. That is why the index can rise while the "typical" stock falls.</p>
+        </div>
+        <div>
+          <h4>P/E ratios</h4>
+          <p><em>Trailing P/E</em> = price ÷ the last 12 months of earnings per share. <em>Forward P/E</em> uses analysts' forecast of the next 12 months. A high P/E means investors pay more per dollar of current profit, usually because they expect faster growth or see lower risk. Firms with losses have no meaningful P/E ("n/m").</p>
+        </div>
+        <div>
+          <h4>Dividend yield</h4>
+          <p>Annual dividends per share ÷ price. Many large technology firms return cash mainly through buybacks rather than dividends, so their yield understates total payouts.</p>
+          <h4>52-week range</h4>
+          <p>The bar shows where today's price sits between the lowest and highest close of the past year.</p>
         </div>
       </div>
     </details>
