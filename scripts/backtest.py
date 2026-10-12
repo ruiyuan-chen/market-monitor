@@ -116,7 +116,7 @@ def build_panel() -> tuple[pd.DataFrame, dict, str]:
     df = df[df.index >= pd.Timestamp(START)]
     first = df["p_5d"].first_valid_index()
     df = df.loc[first:]
-    pcols = [c for c in df.columns if c[:2] in ("p_", "b_")]
+    pcols = [c for c in df.columns if c[:2] in ("p_", "b_", "v_")]
     df[pcols] = df[pcols].ffill(limit=5)
     return df, base, src
 
@@ -137,10 +137,14 @@ def hysteresis(p: pd.Series, out_at: float, in_at: float) -> pd.Series:
     return pd.Series(w, index=p.index)
 
 
+def keep(w: pd.Series, ok: pd.Series) -> pd.Series:
+    """Positions from a signal; on days without a signal, keep the last position (fully invested at the start)."""
+    return w.where(ok).ffill().fillna(1.0).clip(0, 1)
+
+
 def rules(df: pd.DataFrame, base: dict) -> dict[str, pd.Series]:
     b5, b21 = base["5d"], base["21d"]
     p5, p21 = df["p_5d"], df["p_21d"]
-    keep = lambda w, ok: w.where(ok).ffill().fillna(1.0).clip(0, 1)   # no signal -> keep the last position
     W = {
         "Buy and hold SPY": pd.Series(1.0, index=df.index),
         "Model 5d: cash when High (≥2× usual rate)": keep((p5 < 2 * b5).astype(float), p5.notna()),
@@ -151,6 +155,8 @@ def rules(df: pd.DataFrame, base: dict) -> dict[str, pd.Series]:
     }
     if "b_5d" in df:
         W["Volatility-only model 5d: cash at 2×"] = keep((df["b_5d"] < 2 * b5).astype(float), df["b_5d"].notna())
+    if "v_5d" in df:
+        W["VIX-only model 5d: cash at 2×"] = keep((df["v_5d"] < 2 * b5).astype(float), df["v_5d"].notna())
     W["VIX above 25 → cash"] = (df["vix"] <= 25).astype(float)
     W["VIX above 30 → cash"] = (df["vix"] <= 30).astype(float)
     W[f"VIX volatility target {VOL_TARGET:.0%}"] = (VOL_TARGET * 100 / df["vix"]).clip(upper=1)
@@ -348,6 +354,67 @@ def draw(res: dict, names: list[str], path: Path) -> None:
     ax.legend(frameon=False, fontsize=8.5, loc="upper center", bbox_to_anchor=(0.5, -0.1), ncol=len(names), labelcolor="#455366")
     fig.subplots_adjust(right=0.78, bottom=0.18)
     fig.savefig(path, bbox_inches="tight"); plt.close(fig)
+
+
+# --------------------------------------------------------------------------------------
+# Website version: one rule per model, written to data/backtest.json by the daily update
+# --------------------------------------------------------------------------------------
+
+SITE_MODELS = [("main", "p_", "Turbulence model"), ("vix", "v_", "VIX only"), ("vol", "b_", "Volatility only")]
+
+
+def weekly(V: pd.Series) -> pd.Series:
+    """Last value of each week, on its real date (the final, partial week included)."""
+    return V.groupby(V.index.to_period("W-FRI")).tail(1)
+
+
+def site_backtest() -> dict:
+    """For each model and horizon: go to cash at the close when the model's probability is at least twice the
+    usual rate ("High" on the website), otherwise hold SPY. Same costs and tax treatment as main()."""
+    df, base, _ = build_panel()
+    px, rf, r = df["spy"], df["rf"], df["ret"]
+    rng = np.random.default_rng(11)
+    worst, best = r.nsmallest(10).index, r.nlargest(10).index
+
+    def run(w, final_tax):
+        pre = simulate(w, px, rf, COST, 0.0, 0.0)
+        post = simulate(w, px, rf, COST, TAX, final_tax)
+        return pre, post, metrics(pre["V"], rf)
+
+    def entry(key, label, w, pre, post, m, gap):
+        pos = w.shift(1).reindex(df.index)
+        cash = pos == 0
+        return {"key": key, "label": label, "end": round(m["end"], 2), "cagr": m["cagr"], "vol": m["vol"],
+                "sharpe": m["sharpe"], "maxdd": m["maxdd"], "inMarket": float(w.mean()),
+                "roundTrips": int(((w.shift(1) < 0.5) & (w >= 0.5)).sum()),
+                "afterTax": round(post["endAfterTax"], 2), "gap": gap,
+                "cashDays": int(cash.sum()),
+                "cashDayReturn": float(r[cash].mean() * 252) if cash.any() else None,
+                "worstAvoided": int(cash.reindex(worst).sum()), "bestMissed": int(cash.reindex(best).sum())}
+
+    bh_w = pd.Series(1.0, index=df.index)
+    bh_pre, bh_post, bh_m = run(bh_w, LT_TAX)
+    bh_week = weekly(bh_pre["V"])
+    out = {"start": df.index[0].strftime("%Y-%m-%d"), "end": df.index[-1].strftime("%Y-%m-%d"),
+           "years": round(bh_m["years"], 2), "costBps": COST * 1e4, "taxRate": TAX, "longTermTaxRate": LT_TAX,
+           "startValue": START_VALUE, "horizons": {}}
+    for h in ("5d", "21d"):
+        if h not in base:
+            continue
+        strategies = [entry("bh", "Buy and hold SPY", bh_w, bh_pre, bh_post, bh_m, None)]
+        curve = {"dates": [d.strftime("%Y-%m-%d") for d in bh_week.index], "bh": [round(float(v), 2) for v in bh_week.values]}
+        for key, prefix, label in SITE_MODELS:
+            col = f"{prefix}{h}"
+            if col not in df or df[col].notna().sum() == 0:
+                continue
+            w = keep((df[col] < 2 * base[h]).astype(float), df[col].notna())
+            pre, post, m = run(w, TAX)
+            est, lo, hi = boot_diff(pre["V"], bh_pre["V"], rng)
+            strategies.append(entry(key, label, w, pre, post, m, [est, lo, hi]))
+            curve[key] = [round(float(v), 2) for v in weekly(pre["V"]).reindex(bh_week.index).values]
+        out["horizons"][h] = {"threshold": 2 * base[h], "baseRate": base[h], "strategies": strategies, "curve": curve}
+        log(f"  {h}: " + "; ".join(f"{s['label']} ${s['end']:,.0f}" for s in strategies))
+    return out
 
 
 def main() -> None:
