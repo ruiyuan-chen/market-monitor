@@ -3,14 +3,10 @@
 A free, self-updating website about the U.S. stock market. Each tab is its own page:
 
 - **Overview**: S&P 500, Nasdaq, Dow, Russell 2000 and VIX, plus an S&P 500 chart with its 200-day average, drawdown from the record high, and realized vs. implied volatility
-- **Sectors**: heatmap of the 11 S&P 500 sectors (1 day to 1 year)
-- **Largest firms**: top 20 U.S. companies by market cap, with P/E, forward P/E, dividend yield and 52-week range
-- **Rates**: fed funds rate, the Treasury curve, curve slope, real yields, breakevens, high-yield spread and mortgage rates
-- **Economy**: CPI, core CPI, core PCE, unemployment, payrolls and GDP, with recession shading
-- **Cross-asset**: oil, gold, the dollar index, EUR/USD and Bitcoin
-- **Valuation**: Shiller CAPE since 1881, earnings yield and excess CAPE yield
-- **Factors**: Fama-French 5 factors + momentum, with growth-of-$1 charts
-- **Risk models** (the last tab): Ryan Chen's turbulence model and two benchmarks, the VIX alone and realized volatility alone, retrained every day and tested the same way. For each model it shows today's probability of a 3%+ S&P 500 drop within 5 and 21 trading days, an out-of-sample track record and scorecard, calibration, and what $10,000 would have become trading on it, next to buy and hold. It also shows what drives the turbulence model's reading and the author's evaluation
+- **Sectors & firms**: heatmap of the 11 S&P 500 sectors (1 day to 1 year), and the top 20 U.S. companies by market cap, with P/E, forward P/E, dividend yield and 52-week range
+- **Rates & economy**: fed funds rate, the Treasury curve, curve slope, real yields, breakevens, high-yield spread and mortgage rates; CPI, core CPI, core PCE, unemployment, payrolls and GDP, with recession shading
+- **Valuation & factors**: Shiller CAPE since 1881, earnings yield and excess CAPE yield; Fama-French 5 factors + momentum, with growth-of-$1 charts
+- **Risk models** (the last tab): Ryan Chen's turbulence model and two benchmarks, the VIX alone and realized volatility alone, retrained every day and tested the same way. For each model it shows today's probability of a 3%+ S&P 500 drop within 5 and 21 trading days, an out-of-sample track record and scorecard, and what $10,000 would have become trading on it, next to buy and hold. It also shows what drives the turbulence model's reading and the author's evaluation
 - **About the data** (linked in the header and footer): sources, schedule and the status of the last update
 
 Every section has a **Teaching notes** panel explaining the numbers. Every chart has a **data table and CSV download**.
@@ -61,9 +57,10 @@ No server, no database and no paid API. If one source fails, that section keeps 
   Actions → New repository secret**, name it `FRED_API_KEY` and paste the key.
 - **Personalize:** edit `assets/js/config.js` (title, your name, link to your academic site, course name).
 - **Tabs:** the list at the top of `assets/js/shell.js` sets the tab names and their order. To drop a tab, remove
-  its line there and delete its HTML file.
+  its line there and delete its HTML file. A page can hold several sections: each `<section>` with its
+  element ids (for example `#firm-table`) is drawn wherever it appears.
 - **Change what's tracked:** the lists at the top of `scripts/update_data.py` (indices, sector funds,
-  cross-asset tickers, the candidate pool for the "Largest firms" ranking, FRED series).
+  the commodity and currency tickers in the top strip, the candidate pool for the "Largest firms" ranking, FRED series).
 - **Link it from your academic site**, e.g. a "Market Monitor" item in the Teaching page.
 
 ---
@@ -73,7 +70,8 @@ No server, no database and no paid API. If one source fails, that section keeps 
 | Path | What it is |
 |---|---|
 | `index.html` | The Overview page (the site's home page) |
-| `sectors.html`, `firms.html`, `rates.html`, `economy.html`, `cross-asset.html`, `valuation.html`, `factors.html`, `risk.html`, `about.html` | One page per tab, each with its own **Teaching notes** text (edit freely) |
+| `sectors.html`, `rates.html`, `valuation.html`, `risk.html`, `about.html` | One page per tab; each section has its own **Teaching notes** text (edit freely) |
+| `firms.html`, `economy.html`, `factors.html`, `cross-asset.html` | Redirects from the old page addresses to the combined pages (safe to delete) |
 | `assets/js/shell.js` | The header, tab bar and footer shared by every page |
 | `assets/css/style.css` | Styles. Colors and fonts are variables at the top (navy masthead, green gains, red losses) |
 | `assets/js/app.js` | Draws the tables and charts on each page from `data/*.json` |
