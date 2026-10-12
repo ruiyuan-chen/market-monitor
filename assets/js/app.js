@@ -1,5 +1,6 @@
 /* Market Monitor front end.
-   Reads the JSON files in data/ (written by scripts/update_data.py) and renders every section.
+   Reads the JSON files in data/ (written by scripts/update_data.py) and renders the sections on the
+   current page (each tab is its own HTML file; assets/js/shell.js draws the header and tab bar).
    No build step: plain JavaScript + Chart.js (vendored in assets/vendor). */
 (function () {
   "use strict";
@@ -858,105 +859,75 @@
     if (date) { const d = /^\d{4}-\d{2}-\d{2}$/.test(date) ? fmtDate(ts(date)) : date; $("#commentary-date").textContent = `Updated ${d}`; }
   }
 
-  function renderRisk(mdl, md) {
+  // the models shown side by side; colors follow the model on every chart and table
+  const MODEL_ORDER = ["main", "vix", "vol"];
+  const MODEL_COLOR = { main: "--s1", vix: "--s2", vol: "--s3", bh: "--ink-2" };
+  const MODEL_SHORT = { main: "Turbulence", vix: "VIX", vol: "Volatility" };
+  function modelsOf(mdl) {
+    if (mdl.models && Object.keys(mdl.models).length) {
+      return MODEL_ORDER.filter((k) => mdl.models[k]).map((k) => Object.assign({ key: k }, mdl.models[k]));
+    }
+    // data written before the side-by-side models existed: the main model plus its volatility baseline
+    const H = mdl.horizons, main = { key: "main", label: "Turbulence model", inputs: "The author's model: turbulence, breadth and volatility", horizons: {} };
+    const vol = { key: "vol", label: "Volatility only", inputs: "The past month's realized volatility", horizons: {} };
+    Object.keys(H).forEach((k) => {
+      const e = H[k].evaluation || {};
+      main.horizons[k] = { probability: H[k].probability, level: H[k].level, percentile: H[k].percentile, evaluation: e.model, calibration: H[k].calibration };
+      vol.horizons[k] = { evaluation: e.volBaseline };
+    });
+    return [main, vol];
+  }
+  const swatch = (key) => el("span", { class: "key", style: `color:${css(MODEL_COLOR[key])}`, "aria-hidden": "true" });
+  const money = (v) => (ok(v) ? "$" + fmtNum(v, 0) : "–");
+
+  function renderRisk(mdl, md, bt) {
     renderCommentary(md);
-    const box = $("#risk-signal");
+    const box = $("#risk-models");
     if (!mdl || !mdl.horizons || !mdl.history) {
-      emptyState(box, "The model's first run hasn't finished yet. Results appear here after the next automatic update.");
-      ["#risk-chart", "#risk-score", "#risk-drivers"].forEach((s) => { const p = $(s) && $(s).closest(".panel"); if (p) p.hidden = true; });
+      emptyState(box, "The models' first run hasn't finished yet. Results appear here after the next automatic update.");
+      ["#risk-chart", "#risk-score", "#risk-drivers", "#bt-chart", "#risk-calib"].forEach((s) => { const p = $(s) && $(s).closest(".panel"); if (p) p.hidden = true; });
       return;
     }
-    const H = mdl.horizons, keys = Object.keys(H), asof = ts(mdl.asof);
+    const H = mdl.horizons, keys = Object.keys(H), asof = ts(mdl.asof), M = modelsOf(mdl);
     const evalStart = (mdl.model && mdl.model.evalStart) || mdl.history.dates[0];
-    let cur = bindRange("riskh", (r) => { cur = r; drawSignals(); chart.rebuild(); drawCalib(); drawDrivers(); }) || keys[0];
+    const BT = bt && bt.horizons && Object.keys(bt.horizons).length ? bt.horizons : null;
+    let cur = bindRange("riskh", (r) => { cur = r; drawToday(); chart.rebuild(); drawScore(); drawCalib(); drawDrivers(); if (btChart) btChart.rebuild(); drawBt(); }) || keys[0];
+    let calibModel = bindRange("calibm", (r) => { calibModel = r; drawCalib(); }) || "main";
+    // hide calibration buttons for models that aren't in the data
+    document.querySelectorAll('[data-range="calibm"] button').forEach((b) => { if (!M.some((m) => m.key === b.dataset.r)) b.hidden = true; });
     if (mdl.sample) { const n = $("#risk-notice"); n.hidden = false; n.textContent = `Preview: these results come from your sample file, which ends on ${fmtDate(asof)}. On the live site they update every trading day.`; }
-    $("#risk-sub").textContent = `Estimated after the close on ${fmtDate(asof)} · S&P 500 at ${fmtNum(mdl.spxClose, 2)}`;
+    $("#risk-sub").textContent = `Estimated after the close on ${fmtDate(asof)} · S&P 500 at ${fmtNum(mdl.spxClose, 2)} · chance of a ${Math.round(Math.abs(H[keys[0]].threshold) * 100)}% or larger drop`;
+    const th = (t, cls) => el("th", { class: cls || null, scope: "col" }, t);
 
-    function drawSignals() {
-      box.replaceChildren(...keys.map((k) => {
-        const h = H[k];
-        const pctl = ok(h.percentile) ? `Higher than ${Math.round(h.percentile * 100)}% of the model's estimates since ${fmtDate(ts(evalStart), "month")}` : "";
-        return el("div", { class: "signal", "aria-current": String(k === cur) },
-          el("div", { class: "k" }, `Next ${h.days} trading days`),
-          el("div", { class: "v num" }, pct1(h.probability)),
-          el("div", { class: "n" }, `chance of a ${Math.round(Math.abs(h.threshold) * 100)}% drop · usual rate ${pct1(h.baseRate)}`),
-          levelChip(h.level), meter(h.probability, h.baseRate),
-          pctl ? el("div", { class: "n muted" }, pctl) : null);
-      }));
+    // ---- today's readings, every model
+    function drawToday() {
+      box.replaceChildren(el("table", { class: "models-table" },
+        el("thead", null, el("tr", null, th("Model"), ...keys.map((k) => el("th", { class: "n" + (k === cur ? " cur" : ""), scope: "col" },
+          `Next ${H[k].days} days`, el("span", { class: "th-sub" }, `usual rate ${pct1(H[k].baseRate)}`))))),
+        el("tbody", null, M.map((m) => el("tr", null,
+          el("td", { class: "model-cell" }, el("span", { class: "model-name" }, swatch(m.key), m.label), el("span", { class: "sub" }, m.inputs)),
+          ...keys.map((k) => {
+            const e = (m.horizons || {})[k] || {};
+            if (!ok(e.probability)) return el("td", { class: "n" + (k === cur ? " cur" : "") }, "–");
+            const pctl = ok(e.percentile) ? `higher than ${Math.round(e.percentile * 100)}% of past days` : "";
+            return el("td", { class: "n reading" + (k === cur ? " cur" : "") },
+              el("span", { class: "prob num" }, pct1(e.probability)), e.level ? levelChip(e.level) : null,
+              pctl ? el("span", { class: "sub" }, pctl) : null);
+          }))))));
     }
-    drawSignals();
+    drawToday();
     const m0 = mdl.model || {}, h0 = H[keys[0]];
     const live = (mdl.liveLog || []).filter((e) => e.date);
     $("#risk-foot").replaceChildren(...[
-      el("span", null, `Logistic regression on ${(m0.features || []).length} inputs: turbulence and breadth from ${m0.universe || "–"} stocks in ${m0.clusters || "–"} clusters, plus S&P 500 volatility`),
-      el("span", null, `Trained on ${fmtNum(h0.trainDays, 0)} days since ${fmtDate(ts(m0.featureStart || mdl.history.dates[0]), "month")}`),
+      el("span", null, `Turbulence model: logistic regression on ${(m0.features || []).length} inputs from ${m0.universe || "–"} stocks in ${m0.clusters || "–"} clusters, trained on ${fmtNum(h0.trainDays, 0)} days since ${fmtDate(ts(m0.featureStart || mdl.history.dates[0]), "month")}`),
+      el("span", null, "VIX only and Volatility only: the same regression with one input each"),
       live.length > 1 ? el("span", null, `Live estimates logged daily since ${fmtDate(ts(live[0].date))}`) : null,
-      el("span", null, "Levels compare the estimate with the usual rate: below 0.75× low, up to 1.25× normal, up to 2× elevated, above that high.")].filter(Boolean));
+      el("span", null, "Levels compare an estimate with the usual rate: below 0.75× low, up to 1.25× normal, up to 2× elevated, above that high.")].filter(Boolean));
 
-    // track record chart
-    const dates = mdl.history.dates.map(ts);
-    let range = bindRange("riskr", (r) => { range = r; chart.rebuild(); });
-    const chart = managed({
-      canvasId: "risk-chart", legendId: "risk-legend", csvName: "drawdown_model_track_record", grain: "day",
-      legendExtra: [{ label: "A 3%+ drop followed within the horizon", cls: "event" }], yFmtCsv: (v) => fmtNum(v * 100, 2) + "%",
-      build: () => {
-        const h = H[cur], P = mdl.history[`p_${cur}`] || [], Y = mdl.history[`y_${cur}`] || [];
-        const pts = []; const periods = []; let runStart = null;
-        dates.forEach((x, i) => {
-          if (ok(P[i])) pts.push({ x, y: P[i] });
-          if (Y[i] === 1 && runStart === null) runStart = x;
-          if (Y[i] !== 1 && runStart !== null) { periods.push([runStart, dates[i - 1] + 864e5]); runStart = null; }
-        });
-        if (runStart !== null) periods.push([runStart, dates[dates.length - 1] + 864e5]);
-        const last = pts.length ? pts[pts.length - 1].x : asof, first = pts.length ? pts[0].x : dates[0];
-        const start = rangeStart(range, last, first);
-        $("#risk-chart-sub").textContent = `Out-of-sample estimate of a ${Math.round(Math.abs(h.threshold) * 100)}% drop within ${h.days} trading days. Each day's estimate comes from a model trained only on earlier data`;
-        return timeLineChart($("#risk-chart"), {
-          series: [{ label: `Estimated probability (${h.days}-day)`, color: css("--s1"), points: sliceFrom(pts, start) }],
-          min: Math.max(start, first), max: last, grain: "day", suggestedMin: 0,
-          recessions: periods, shadeColor: "--event",
-          refLines: [{ y: h.baseRate, label: `Usual rate ${pct1(h.baseRate)}` }],
-          yFmt: (v) => fmtNum(v * 100, 1) + "%", yTick: (v) => Math.round(v * 100) + "%",
-        });
-      },
-    });
-
-    // scorecard (both horizons)
-    const th = (t, cls) => el("th", { class: cls || null, scope: "col" }, t);
-    const ev = (k) => (H[k].evaluation || {});
-    const rowsDef = [
-      ["Days tested", (s) => fmtNum(s.n, 0), null],
-      ["Days followed by a drawdown", (s) => `${fmtNum(s.events, 0)} (${pct1(s.baseRate)})`, null],
-      ["AUC (0.5 = coin flip)", (s) => fmtNum(s.auc, 2), "auc"],
-      ["Precision-recall AUC (usual rate = no skill)", (s) => fmtNum(s.prAuc, 2), "prAuc"],
-      ["Brier skill (above 0 beats the usual rate)", (s) => signed(s.brierSkill, 3), "brierSkill"],
-      ["Drawdown rate on the riskiest 20% of days", (s) => pct1(s.hitRateTop20), "hitRateTop20"],
-    ];
-    const anyEval = ev(keys[0]).model || {};
-    $("#risk-score").replaceChildren(el("table", null,
-      el("thead", null, el("tr", null, th("Measure"), ...keys.flatMap((k) => [th(`${H[k].days}-day model`, "n"), th("Baseline", "n hide-sm")]))),
-      el("tbody", null, rowsDef.map(([lab, f, key]) => el("tr", null, el("td", { style: "white-space:normal;min-width:180px" }, lab),
-        ...keys.flatMap((k) => {
-          const m = ev(k).model || {}, b = ev(k).volBaseline || {};
-          const mb = key && ok(m[key]) && ok(b[key]) ? (m[key] > b[key] ? "m" : m[key] < b[key] ? "b" : "") : "";
-          return [el("td", { class: "n" + (mb === "m" ? " best" : "") }, ok(m.n) ? f(m) : "–"),
-                  el("td", { class: "n hide-sm" + (mb === "b" ? " best" : "") }, ok(b.n) ? f(b) : "–")];
-        }))))));
-    if (anyEval.start) $("#score-sub").textContent = `Out of sample, ${fmtDate(ts(anyEval.start))} to ${fmtDate(ts(anyEval.end))}, refit monthly. Baseline: a model that uses only the past month's volatility. Bold marks the better of the two.`;
-
-    function drawCalib() {
-      const rows = H[cur].calibration || [];
-      $("#calib-sub").textContent = `${H[cur].days}-day horizon: when the model's estimate fell in each range, how often a drawdown followed`;
-      $("#risk-calib").replaceChildren(el("table", null,
-        el("thead", null, el("tr", null, th("Estimate"), th("Days", "n"), th("Avg. estimate", "n"), th("Drawdown followed", "n"))),
-        el("tbody", null, rows.map((r) => el("tr", null,
-          el("td", null, `${Math.round(r.from * 100)}–${Math.round(r.to * 100)}%`),
-          el("td", { class: "n" }, fmtNum(r.days, 0)), el("td", { class: "n" }, pct1(r.predicted)), el("td", { class: "n strong" }, pct1(r.observed)))))));
-    }
-    drawCalib();
-
+    // ---- drivers (turbulence model only)
     function drawDrivers() {
       const d = H[cur].drivers || [];
+      $("#drivers-sub").textContent = `${H[cur].days}-day estimate: each input's push (standardized value × model weight)`;
       const max = Math.max(0.05, ...d.map((x) => Math.abs(x.contribution)));
       $("#risk-drivers").replaceChildren(...d.map((x) => {
         const w = (Math.abs(x.contribution) / max) * 50;
@@ -969,8 +940,127 @@
     }
     drawDrivers();
 
-    // internals
-    const fmtI = (x) => (x.key === "TurbScalar" ? fmtNum(x.value * 100, 2) + "%" : x.format === "pct" ? fmtNum(x.value * 100, 1) + "%" : x.format === "z" ? signed(x.value, 2) : Math.abs(x.value) < 0.1 ? x.value.toFixed(4) : fmtNum(x.value, 2));
+    // ---- track record: every model on one chart
+    const dates = mdl.history.dates.map(ts);
+    let range = bindRange("riskr", (r) => { range = r; chart.rebuild(); });
+    const chart = managed({
+      canvasId: "risk-chart", legendId: "risk-legend", csvName: "drawdown_models_track_record", grain: "day",
+      legendExtra: [{ label: "A 3%+ drop followed within the horizon", cls: "event" }], yFmtCsv: (v) => fmtNum(v * 100, 2) + "%",
+      build: () => {
+        const h = H[cur], Y = mdl.history[`y_${cur}`] || [];
+        const periods = []; let runStart = null;
+        dates.forEach((x, i) => {
+          if (Y[i] === 1 && runStart === null) runStart = x;
+          if (Y[i] !== 1 && runStart !== null) { periods.push([runStart, dates[i - 1] + 864e5]); runStart = null; }
+        });
+        if (runStart !== null) periods.push([runStart, dates[dates.length - 1] + 864e5]);
+        const series = M.map((m) => {
+          const P = mdl.history[m.key === "main" ? `p_${cur}` : `p_${cur}_${m.key}`] || [];
+          const pts = []; dates.forEach((x, i) => { if (ok(P[i])) pts.push({ x, y: P[i] }); });
+          return { label: m.label, color: css(MODEL_COLOR[m.key]), points: pts, width: m.key === "main" ? 2 : 1.6 };
+        }).filter((s) => s.points.length);
+        const all = series.flatMap((s) => s.points);
+        const last = all.length ? Math.max(...series.map((s) => s.points[s.points.length - 1].x)) : asof;
+        const first = all.length ? Math.min(...series.map((s) => s.points[0].x)) : dates[0];
+        const start = rangeStart(range, last, first);
+        series.forEach((s) => (s.points = sliceFrom(s.points, start)));
+        $("#risk-chart-sub").textContent = `Out-of-sample estimate of a ${Math.round(Math.abs(h.threshold) * 100)}% drop within ${h.days} trading days. Each day's estimates come from models trained only on earlier data`;
+        return timeLineChart($("#risk-chart"), {
+          series, min: Math.max(start, first), max: last, grain: "day", suggestedMin: 0,
+          recessions: periods, shadeColor: "--event",
+          refLines: [{ y: h.baseRate, label: `Usual rate ${pct1(h.baseRate)}` }],
+          yFmt: (v) => fmtNum(v * 100, 1) + "%", yTick: (v) => Math.round(v * 100) + "%",
+        });
+      },
+    });
+
+    // ---- scorecard: models side by side for the selected horizon
+    const rowsDef = [
+      ["Days tested", (s) => fmtNum(s.n, 0), null],
+      ["Days followed by a drawdown", (s) => `${fmtNum(s.events, 0)} (${pct1(s.baseRate)})`, null],
+      ["AUC (0.5 = coin flip)", (s) => fmtNum(s.auc, 3), "auc"],
+      ["Precision-recall AUC (usual rate = no skill)", (s) => fmtNum(s.prAuc, 3), "prAuc"],
+      ["Brier skill (above 0 beats the usual rate)", (s) => signed(s.brierSkill, 3), "brierSkill"],
+      ["Drawdown rate on the riskiest 20% of days", (s) => pct1(s.hitRateTop20), "hitRateTop20"],
+    ];
+    function drawScore() {
+      const evs = M.map((m) => ((m.horizons || {})[cur] || {}).evaluation || {});
+      $("#risk-score").replaceChildren(el("table", null,
+        el("thead", null, el("tr", null, th("Measure"), ...M.map((m) => el("th", { class: "n", scope: "col" }, el("span", { class: "th-model" }, swatch(m.key), m.label))))),
+        el("tbody", null, rowsDef.map(([lab, f, key]) => {
+          const vals = evs.map((e) => (key ? e[key] : null)).filter(ok);
+          const best = key && vals.length > 1 ? Math.max(...vals) : null;
+          return el("tr", null, el("td", { style: "white-space:normal;min-width:180px" }, lab),
+            ...evs.map((e) => el("td", { class: "n" + (best !== null && e[key] === best ? " best" : "") }, ok(e.n) ? f(e) : "–")));
+        }))));
+      const e0 = evs.find((e) => e.start) || {};
+      if (e0.start) $("#score-sub").textContent = `${H[cur].days}-day horizon, out of sample, ${fmtDate(ts(e0.start))} to ${fmtDate(ts(e0.end))}, refit monthly, same days for every model. Bold marks the best model on each measure.`;
+    }
+    drawScore();
+
+    // ---- calibration, for the chosen model
+    function drawCalib() {
+      const m = M.find((x) => x.key === calibModel) || M[0];
+      const rows = ((m.horizons || {})[cur] || {}).calibration || (m.key === "main" ? H[cur].calibration : null) || [];
+      $("#calib-sub").textContent = `${m.label}, ${H[cur].days}-day horizon: when its estimate fell in each range, how often a drawdown followed`;
+      $("#risk-calib").replaceChildren(rows.length ? el("table", null,
+        el("thead", null, el("tr", null, th("Estimate"), th("Days", "n"), th("Avg. estimate", "n"), th("Drawdown followed", "n"))),
+        el("tbody", null, rows.map((r) => el("tr", null,
+          el("td", null, `${Math.round(r.from * 100)}–${Math.round(r.to * 100)}%`),
+          el("td", { class: "n" }, fmtNum(r.days, 0)), el("td", { class: "n" }, pct1(r.predicted)), el("td", { class: "n strong" }, pct1(r.observed)))))) :
+        el("div", { class: "empty" }, "No calibration data for this model yet."));
+    }
+    drawCalib();
+
+    // ---- trading on each model
+    const btChart = BT ? managed({
+      canvasId: "bt-chart", legendId: "bt-legend", csvName: "model_trading_rules", grain: "day", yFmtCsv: (v) => fmtNum(v, 2),
+      build: () => {
+        const hb = BT[cur] || BT[Object.keys(BT)[0]], c = hb.curve, xs = c.dates.map(ts);
+        const keysIn = ["bh", ...M.map((m) => m.key).filter((k) => c[k])];
+        const label = (k) => (k === "bh" ? "Buy and hold SPY" : `${(M.find((m) => m.key === k) || {}).label}: cash when High`);
+        return timeLineChart($("#bt-chart"), {
+          series: keysIn.map((k) => ({ label: label(k), color: css(MODEL_COLOR[k]), width: k === "bh" ? 2.4 : 1.8,
+            points: xs.map((x, i) => ({ x, y: c[k][i] })).filter((p) => ok(p.y)) })),
+          min: xs[0], max: xs[xs.length - 1], grain: "day",
+          refLines: [{ y: bt.startValue || 10000, label: `${money(bt.startValue || 10000)} invested` }],
+          yFmt: (v) => money(v), yTick: (v) => "$" + Math.round(v).toLocaleString("en-US"),
+        });
+      },
+    }) : null;
+    function drawBt() {
+      if (!BT) { const p = $("#bt-panel"); if (p) p.hidden = true; return; }
+      const hb = BT[cur] || BT[Object.keys(BT)[0]], S = hb.strategies || [], days = H[cur] ? H[cur].days : cur;
+      $("#bt-sub").textContent = `Hold the S&P 500 (SPY); move to cash at the close whenever a model's ${days}-day estimate is High, at least ${pct1(hb.threshold)} (twice the usual rate). ${fmtDate(ts(bt.start))} to ${fmtDate(ts(bt.end))}, before tax.`;
+      const gapCell = (s) => {
+        if (!s.gap) return el("td", { class: "n" }, "–");
+        const [g, lo, hi] = s.gap;
+        return el("td", { class: "n" }, change(g, signed(g * 100, 1, "%")), el("span", { class: "sub" }, `${signed(lo * 100, 1)} to ${signed(hi * 100, 1)}`));
+      };
+      $("#bt-table").replaceChildren(el("table", { class: "bt-table" },
+        el("thead", null, el("tr", null, th("Strategy"), th(`${money(bt.startValue || 10000)} became`, "n"), th("Return a year", "n"),
+          th("vs. buy & hold a year (90% range)", "n"), th("Worst drawdown", "n"), th("Invested", "n hide-sm"),
+          th("Round trips", "n hide-sm"), th("Best 10 days missed", "n hide-sm"), th("After tax", "n"))),
+        el("tbody", null, S.map((s) => el("tr", null,
+          el("td", null, el("span", { class: "model-name" }, swatch(s.key), s.key === "bh" ? s.label : `${s.label}: cash when High`)),
+          el("td", { class: "n strong" }, money(s.end)), el("td", { class: "n" }, signed(s.cagr * 100, 1, "%")),
+          gapCell(s), el("td", { class: "n" }, signed(s.maxdd * 100, 1, "%")),
+          el("td", { class: "n hide-sm" }, ok(s.inMarket) ? Math.round(s.inMarket * 100) + "%" : "–"),
+          el("td", { class: "n hide-sm" }, fmtNum(s.roundTrips, 0)),
+          el("td", { class: "n hide-sm" }, s.key === "bh" ? "–" : fmtNum(s.bestMissed, 0)),
+          el("td", { class: "n" }, money(s.afterTax)))))));
+      const main = S.find((s) => s.key === "main");
+      const foot = [];
+      if (main && main.cashDays > 0 && ok(main.cashDayReturn)) {
+        foot.push(el("span", null, `On the ${fmtNum(main.cashDays, 0)} days the turbulence model had you in cash, the market went on to return ${signed(main.cashDayReturn * 100, 0, "%")} a year on average; it sat out ${main.bestMissed} of the 10 best days and ${main.worstAvoided} of the 10 worst.`));
+      }
+      foot.push(el("span", null, `Costs ${fmtNum(bt.costBps, 0)} bp per trade. After tax: ${Math.round(bt.taxRate * 100)}% on the rules' realized gains, ${Math.round(bt.longTermTaxRate * 100)}% on buy and hold's gain at the end. A simulation for study, not investment advice.`));
+      $("#bt-foot").replaceChildren(...foot);
+    }
+    drawBt();
+
+    // ---- internals
+    const fmtI = (x) => (x.key === "TurbScalar" ? fmtNum(x.value * 100, 2) + "%" : x.key === "VIX" ? fmtNum(x.value, 1) : x.format === "pct" ? fmtNum(x.value * 100, 1) + "%" : x.format === "z" ? signed(x.value, 2) : Math.abs(x.value) < 0.1 ? x.value.toFixed(4) : fmtNum(x.value, 2));
     $("#risk-internals").replaceChildren(el("table", null,
       el("thead", null, el("tr", null, th("Measure"), th("Latest", "n"), th("Percentile vs. history"))),
       el("tbody", null, (mdl.internals || []).map((x) => el("tr", null,
@@ -1035,8 +1125,9 @@
 
   function renderStatus(st, markets) {
     const list = $("#status-list");
-    const names = { markets: "Indices, sectors, cross-asset", firms: "Largest companies", macro: "Rates and economy", valuation: "Shiller CAPE", factors: "Fama-French factors", model: "Drawdown risk model" };
-    if (!st || !st.sections) { list.replaceChildren(el("li", null, "No update has run yet.")); }
+    const names = { markets: "Indices, sectors, cross-asset", firms: "Largest companies", macro: "Rates and economy", valuation: "Shiller CAPE", factors: "Fama-French factors", model: "Drawdown risk models", backtest: "Model trading results" };
+    if (!list) { /* only the About page lists every source */ }
+    else if (!st || !st.sections) { list.replaceChildren(el("li", null, "No update has run yet.")); }
     else {
       list.replaceChildren(...Object.entries(names).map(([k, lab]) => {
         const s = st.sections[k];
@@ -1065,19 +1156,22 @@
       notice.textContent = `The latest prices are from ${fmtDate(d)}. The automatic update may have stopped. Check the Actions tab of the repository.`;
     } else if (failed.length) {
       notice.hidden = false;
-      notice.textContent = `Some sources didn't update on the last run (${failed.join(", ")}), so those sections show the most recent data available. See "About the data".`;
+      notice.replaceChildren(`Some sources didn't update on the last run (${failed.join(", ")}), so those sections show the most recent data available. See `, el("a", { href: "about.html" }, "About the data"), ".");
     }
   }
 
   // ------------------------------------------------------------------ page chrome
   function applySiteConfig() {
     const S = window.SITE || {};
-    if (S.title) { $("#site-title").textContent = S.title; document.title = S.title; }
-    if (S.tagline) $("#site-tagline").textContent = S.tagline;
+    if (S.title) {
+      if ($("#site-title")) $("#site-title").textContent = S.title;
+      document.title = document.body.dataset.page === "overview" || !document.body.dataset.page ? S.title : document.title.replace(/Market Monitor$/, S.title);
+    }
+    if (S.tagline && $("#site-tagline")) $("#site-tagline").textContent = S.tagline;
     const who = S.maintainer ? (S.maintainerUrl ? el("a", { href: S.maintainerUrl }, S.maintainer) : S.maintainer) : null;
     if (who) {
-      $("#maintainer").replaceChildren("Maintained by ", who, S.course ? ` for ${S.course}` : "", ".");
-      $("#foot-line").replaceChildren(`${S.title || "Market Monitor"} · maintained by `, who.cloneNode ? who.cloneNode(true) : who, " · for educational use only, not investment advice.");
+      if ($("#maintainer")) $("#maintainer").replaceChildren("Maintained by ", who, S.course ? ` for ${S.course}` : "", ".");
+      if ($("#foot-line")) $("#foot-line").replaceChildren(`${S.title || "Market Monitor"} · maintained by `, who.cloneNode ? who.cloneNode(true) : who, " · for educational use only, not investment advice.");
     }
   }
 
@@ -1095,23 +1189,13 @@
   }
 
   function setupNav() {
-    const links = [...document.querySelectorAll(".secnav a")];
-    const byId = new Map(links.map((a) => [a.getAttribute("href").slice(1), a]));
-    if (!("IntersectionObserver" in window)) return;
-    const io = new IntersectionObserver((entries) => {
-      entries.forEach((e) => {
-        if (e.isIntersecting) {
-          links.forEach((a) => a.classList.remove("active"));
-          const a = byId.get(e.target.id);
-          if (a) { a.classList.add("active"); a.scrollIntoView({ block: "nearest", inline: "nearest" }); }
-        }
-      });
-    }, { rootMargin: "-45% 0px -50% 0px" });
-    document.querySelectorAll("main section[id]").forEach((s) => io.observe(s));
+    // each tab is its own page; on a narrow screen, scroll the tab bar so the current tab is in view
+    const bar = $(".secnav .wrap"), a = $(".secnav a.active");
+    if (bar && a && bar.scrollWidth > bar.clientWidth) bar.scrollLeft = Math.max(0, a.offsetLeft - (bar.clientWidth - a.offsetWidth) / 2);
   }
 
   function safe(fn, containerSel, ...args) {
-    try { fn(...args); } catch (e) { console.error(e); emptyState($(containerSel), "Something went wrong drawing this section."); }
+    try { fn(...args); } catch (e) { console.error(e); const box = $(containerSel); if (box) emptyState(box, "Something went wrong drawing this section."); }
   }
 
   async function main() {
@@ -1119,21 +1203,31 @@
     chartDefaults();
     setupTheme();
     setupNav();
-    const [markets, firms, macro, valuation, factors, status, model, commentary] = await Promise.all([
-      ...["markets", "firms", "macro", "valuation", "factors", "status", "model"].map(getJSON), getText("content/commentary.md")]);
+    // every page shows the masthead (markets, macro, status); the rest loads only where its section is
+    const has = (sel) => !!$(sel);
+    const onRisk = has("#risk-models");
+    const [markets, macro, status, firms, valuation, factors, model, commentary, backtest] = await Promise.all([
+      getJSON("markets"), getJSON("macro"), getJSON("status"),
+      has("#firm-table") ? getJSON("firms") : null,
+      has("#val-stats") ? getJSON("valuation") : null,
+      has("#factor-table") ? getJSON("factors") : null,
+      onRisk ? getJSON("model") : null,
+      onRisk ? getText("content/commentary.md") : null,
+      onRisk ? getJSON("backtest") : null]);
+    const run = (sel, fn, ...args) => { if (has(sel)) safe(fn, sel, ...args); };
     safe(renderStatus, "#status-list", status, markets);
-    safe(renderStrip, "#key-strip", markets, macro);
-    safe(renderOverview, "#index-table", markets);
-    safe(renderRisk, "#risk-signal", model, commentary);
-    safe(renderSectors, "#sector-table", markets);
-    safe(renderFirms, "#firm-table", firms);
-    safe(renderRates, "#rate-table", macro);
-    safe(renderEconomy, "#macro-table", macro);
-    safe(renderCross, "#cross-table", markets);
-    safe(renderValuation, "#val-stats", valuation, macro);
+    run("#key-strip", renderStrip, markets, macro);
+    run("#index-table", renderOverview, markets);
+    run("#risk-models", renderRisk, model, commentary, backtest);
+    run("#sector-table", renderSectors, markets);
+    run("#firm-table", renderFirms, firms);
+    run("#rate-table", renderRates, macro);
+    run("#macro-table", renderEconomy, macro);
+    run("#cross-table", renderCross, markets);
+    run("#val-stats", renderValuation, valuation, macro);
+    run("#factor-table", renderFactors, factors);
     // redraw charts once the web fonts arrive so axis labels use them
     if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { chartDefaults(); redrawers.forEach((f) => { try { f(); } catch (e) { console.error(e); } }); });
-    safe(renderFactors, "#factor-table", factors);
   }
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", main);
