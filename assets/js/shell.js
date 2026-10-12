@@ -5,13 +5,9 @@
   "use strict";
   var PAGES = [
     ["overview", "index.html", "Overview"],
-    ["sectors", "sectors.html", "Sectors"],
-    ["firms", "firms.html", "Largest firms"],
-    ["rates", "rates.html", "Rates"],
-    ["economy", "economy.html", "Economy"],
-    ["cross", "cross-asset.html", "Cross-asset"],
-    ["valuation", "valuation.html", "Valuation"],
-    ["factors", "factors.html", "Factors"],
+    ["sectors", "sectors.html", "Sectors &amp; firms"],
+    ["rates", "rates.html", "Rates &amp; economy"],
+    ["valuation", "valuation.html", "Valuation &amp; factors"],
     ["risk", "risk.html", "Risk models"],
   ];
   var ABOUT = ["about", "about.html", "About the data"];
@@ -21,9 +17,9 @@
 
   // old single-page links (index.html#rates and so on) go to the new page
   if (page === "overview" && location.hash) {
-    var legacy = { "#risk": "risk.html", "#sectors": "sectors.html", "#firms": "firms.html", "#rates": "rates.html",
-      "#economy": "economy.html", "#cross": "cross-asset.html", "#valuation": "valuation.html",
-      "#factors": "factors.html", "#about": "about.html" };
+    var legacy = { "#risk": "risk.html", "#sectors": "sectors.html", "#firms": "sectors.html#firms", "#rates": "rates.html",
+      "#economy": "rates.html#economy", "#valuation": "valuation.html", "#factors": "valuation.html#factors",
+      "#about": "about.html" };
     if (legacy[location.hash]) { location.replace(legacy[location.hash]); return; }
   }
 
