@@ -17,6 +17,8 @@ What it does
      refitting the model using only data available on that date. Compares it with a volatility-only
      baseline.
   5. Re-forms the clusters as of today, fits the model on all labeled history and predicts today.
+  6. Runs two simple benchmarks the same way, on the same days: the VIX alone and realized volatility
+     alone (CONFIG["models"]). The website shows all three side by side.
 
 Output: data/model.json (read by the website), data/model_log.json (append-only record of each
 day's live prediction, scored once the outcome is known) and data/model_oos.json (every out-of-sample
@@ -73,6 +75,12 @@ CONFIG = {
     "horizons": {"5d": (5, -0.03), "21d": (21, -0.03)},
     "features": ["PC1", "PC2", "PC1_Change", "PC2_Change", "TurbScalar", "InternalTurbulence", "RV21"],
     "refit_every": 21,               # walk-forward block length (about one month)
+    # models reported side by side on the website; "main" uses "features" above
+    "models": {
+        "main": {"label": "Turbulence model", "inputs": "The author's model: turbulence, breadth and volatility"},
+        "vix": {"label": "VIX only", "inputs": "The VIX (options-implied volatility)", "features": ["VIX"]},
+        "vol": {"label": "Volatility only", "inputs": "The past month's realized volatility", "features": ["RV21"]},
+    },
     "history_years_on_site": 6,      # out-of-sample history sent to the website
 }
 
@@ -84,7 +92,12 @@ FEATURE_INFO = {
     "TurbScalar": ("Financial turbulence", "Average decoupling of stock clusters from the S&P 500"),
     "InternalTurbulence": ("Internal turbulence", "Average z-score of six breadth measures: new lows, share below the 50- and 200-day averages, decliners, TRIN and dispersion"),
     "RV21": ("Realized volatility", "Annualized standard deviation of the last 21 daily S&P 500 returns"),
+    "VIX": ("VIX", "Cboe Volatility Index: the options market's estimate of S&P 500 volatility over the next 30 days"),
 }
+
+
+def model_features(cfg: dict, key: str) -> list[str]:
+    return list(cfg["features"]) if key == "main" else list(cfg["models"][key]["features"])
 
 
 def log(msg: str) -> None:
@@ -162,6 +175,33 @@ def spx_series(start: str) -> pd.Series:
     sys.path.insert(0, str(Path(__file__).parent))
     from update_data import fred
     return fred("SP500", start).rename("SPX")
+
+
+def vix_series(start: str) -> pd.Series | None:
+    """Daily VIX close: Yahoo ^VIX, then FRED VIXCLS. None if neither works (the VIX model is skipped)."""
+    path = os.environ.get("RISK_MODEL_VIX_CSV")
+    if path:
+        s = pd.read_csv(path, index_col=0, parse_dates=True).iloc[:, 0]
+        return pd.to_numeric(s, errors="coerce").dropna().rename("VIX")
+    if os.environ.get("RISK_MODEL_PRICES_CSV"):
+        return None
+    try:
+        import yfinance as yf
+        df = yf.download("^VIX", start=start, auto_adjust=False, progress=False, multi_level_index=False)
+        s = df["Close"].dropna()
+        idx = pd.to_datetime(s.index)
+        s.index = (idx.tz_localize(None) if idx.tz is not None else idx).normalize()
+        if len(s) > 500:
+            return s.astype(float).rename("VIX")
+    except Exception as e:  # noqa: BLE001
+        log(f"  Yahoo ^VIX failed ({e}); trying FRED VIXCLS")
+    try:
+        sys.path.insert(0, str(Path(__file__).parent))
+        from update_data import fred
+        return fred("VIXCLS", start).rename("VIX")
+    except Exception as e:  # noqa: BLE001
+        log(f"  FRED VIXCLS failed ({e}); the VIX-only model is skipped")
+        return None
 
 
 # --------------------------------------------------------------------------------------
@@ -285,14 +325,15 @@ def internal_turbulence(b: pd.DataFrame, zwin: int) -> pd.DataFrame:
     return comp
 
 
-def prepare(close: pd.DataFrame, vol: pd.DataFrame, spx: pd.Series, cfg: dict) -> dict:
+def prepare(close: pd.DataFrame, vol: pd.DataFrame, spx: pd.Series, cfg: dict, vix: pd.Series | None = None) -> dict:
     """Everything that does not depend on the clusters."""
     rets = close.pct_change(fill_method=None)
     br = breadth_measures(close, vol, cfg)
     it = internal_turbulence(br, cfg["z_win"])
     rv = (np.log(spx).diff().rolling(21).std() * math.sqrt(252)).rename("RV21")
+    vx = vix.reindex(spx.index).ffill(limit=3).rename("VIX") if vix is not None else None
     return {"close": close, "vol": vol, "spx": spx, "rets": rets, "breadth": br, "internal": it, "rv": rv,
-            "spx_ret": spx.pct_change(fill_method=None).rename("SPX")}
+            "vix": vx, "spx_ret": spx.pct_change(fill_method=None).rename("SPX")}
 
 
 def features_with(prep: dict, clusters: pd.Series, cfg: dict) -> pd.DataFrame:
@@ -302,6 +343,8 @@ def features_with(prep: dict, clusters: pd.Series, cfg: dict) -> pd.DataFrame:
     pcs = expanding_pca(signal, cfg["pca_components"], cfg["pca_start_after"], cfg["pc_change"])
     F = (pcs.join(signal.mean(axis=1).rename("TurbScalar"), how="left")
             .join(prep["internal"][["InternalTurbulence"]], how="inner").join(prep["rv"], how="left"))
+    if prep.get("vix") is not None:
+        F = F.join(prep["vix"], how="left")
     return F[F.index.isin(prep["spx"].index)].dropna(subset=cfg["features"])
 
 
@@ -334,30 +377,34 @@ def fit_rows(X: pd.DataFrame, y: pd.Series, end: int):
     return new_model().fit(X.iloc[:end][m], ytr[m].astype(int))
 
 
-def walk_forward(prep: dict, labels: dict, cfg: dict, index: pd.DatetimeIndex) -> dict:
-    """Out-of-sample probabilities. For each block of `refit_every` days starting at date d: form the
-    clusters from returns up to the day before d, rebuild the features, train on rows whose labels were
-    known before d (t <= i - h - 1), and predict the block."""
-    preds = {name: pd.Series(np.nan, index=index) for name in labels}
-    base = {name: pd.Series(np.nan, index=index) for name in labels}
+def walk_forward(prep: dict, labels: dict, cfg: dict, index: pd.DatetimeIndex, models: dict | None = None) -> dict:
+    """Out-of-sample probabilities for each model (key -> feature list). For each block of `refit_every`
+    days starting at date d: form the clusters from returns up to the day before d, rebuild the features,
+    train on rows whose labels were known before d (t <= i - h - 1), and predict the block. Every model is
+    fit on the same days with the same schedule. Returns {model key: {horizon: series}}."""
+    if models is None:
+        models = {k: model_features(cfg, k) for k in cfg["models"]}
+    preds = {k: {name: pd.Series(np.nan, index=index) for name in labels} for k in models}
     i = index.searchsorted(pd.Timestamp(cfg["eval_start"]))
     blocks = 0
     while i < len(index):
         d = index[i]
         F = features_with(prep, clusters_asof(prep, d - pd.Timedelta(days=1), cfg), cfg).reindex(index)
-        X, R = F[cfg["features"]], F[["RV21"]]
         j = min(len(index), i + cfg["refit_every"])
         for name, y in labels.items():
             h = cfg["horizons"][name][0]
-            for target, Z in ((preds, X), (base, R)):
+            for k, cols in models.items():
+                if not set(cols) <= set(F.columns):
+                    continue
+                Z = F[cols]
                 m = fit_rows(Z, y, max(0, i - h))
                 block = Z.iloc[i:j]
                 ok = block.notna().all(axis=1).values
                 if m is not None and ok.any():
-                    target[name].iloc[np.arange(i, j)[ok]] = m.predict_proba(block[ok])[:, 1]
+                    preds[k][name].iloc[np.arange(i, j)[ok]] = m.predict_proba(block[ok])[:, 1]
         i = j; blocks += 1
-    log(f"  walk-forward: {blocks} monthly blocks from {cfg['eval_start']}")
-    return {"model": preds, "baseline": base}
+    log(f"  walk-forward: {blocks} monthly blocks from {cfg['eval_start']}, models: {', '.join(models)}")
+    return preds
 
 
 def scores(p: pd.Series, y: pd.Series) -> dict:
@@ -411,7 +458,8 @@ def build_model(cfg: dict = CONFIG) -> dict:
     spx = spx_series(cfg["history_start"])
     spx = spx[(spx.index >= close.index[0]) & (spx.index <= close.index[-1])]
     log(f"  S&P 500: {len(spx)} days to {spx.index[-1].date()}")
-    prep = prepare(close, vol, spx, cfg)
+    vix = vix_series(cfg["history_start"])
+    prep = prepare(close, vol, spx, cfg, vix)
 
     # today's model: clusters formed from the trailing window up to the latest date
     live_clusters = clusters_asof(prep, close.index[-1], cfg)
@@ -420,8 +468,17 @@ def build_model(cfg: dict = CONFIG) -> dict:
     asof = X.index[-1]
     log(f"  features: {X.shape[0]} days, {X.index[0].date()} to {asof.date()}; {live_clusters.size} stocks in {live_clusters.nunique()} clusters")
 
+    # the models that can run today: their features exist and have a value on the latest day
+    models = {}
+    for k in cfg["models"]:
+        cols = model_features(cfg, k)
+        if set(cols) <= set(F.columns) and F[cols].iloc[-1].notna().all():
+            models[k] = cols
+        else:
+            missing = sorted(set(cols) - set(F.columns)) or "the latest day's value"
+            log(f"  model '{k}' skipped: missing {missing}")
     labels = {name: make_labels(spx, h, thr).reindex(X.index) for name, (h, thr) in cfg["horizons"].items()}
-    wf = walk_forward(prep, labels, cfg, X.index)
+    wf = walk_forward(prep, labels, cfg, X.index, models)
 
     cut = asof - pd.DateOffset(years=cfg["history_years_on_site"])
     keep = X.index >= max(pd.Timestamp(cfg["eval_start"]), cut)
@@ -440,7 +497,7 @@ def build_model(cfg: dict = CONFIG) -> dict:
         drivers = sorted(({"feature": f, "label": FEATURE_INFO[f][0], "value": float(X.iloc[-1][f]), "z": float(z),
                            "coef": float(c), "contribution": float(c * z)} for f, z, c in zip(X.columns, zx, lr.coef_[0])),
                          key=lambda d: -abs(d["contribution"]))
-        oos, bl = wf["model"][name], wf["baseline"][name]
+        oos, bl = wf["main"][name], wf["vol"][name] if "vol" in wf else pd.Series(np.nan, index=X.index)
         hist = oos.dropna()
         horizons[name] = {
             "days": h, "threshold": thr, "probability": p_now, "baseRate": base_rate,
@@ -448,7 +505,8 @@ def build_model(cfg: dict = CONFIG) -> dict:
             "percentile": float((hist <= p_now).mean()) if len(hist) else None,
             "intercept": float(lr.intercept_[0]),
             "trainDays": int(mask.sum()), "trainEvents": int(y[mask].sum()),
-            "evaluation": {"model": scores(oos, y), "volBaseline": scores(bl, y)},
+            "evaluation": {"model": scores(oos, y), "volBaseline": scores(bl, y),
+                           **({"vixOnly": scores(wf["vix"][name], y)} if "vix" in wf else {})},
             "calibration": calibration(oos, y),
             "drivers": drivers,
         }
@@ -458,15 +516,45 @@ def build_model(cfg: dict = CONFIG) -> dict:
         log(f"  {name}: today {p_now:.3f} (base {base_rate:.3f}) | out-of-sample AUC {ev['model'].get('auc', float('nan')):.3f}"
             f" vs volatility baseline {ev['volBaseline'].get('auc', float('nan')):.3f}")
 
+    # every model side by side: today's estimate and its out-of-sample record, same days and labels
+    side = {}
+    for k, cols in models.items():
+        Xk = F[cols]
+        entry = {"label": cfg["models"][k]["label"], "inputs": cfg["models"][k]["inputs"],
+                 "features": [{"key": f, "label": FEATURE_INFO[f][0]} for f in cols], "horizons": {}}
+        for name, (h, thr) in cfg["horizons"].items():
+            y = labels[name]
+            if k == "main":
+                p_now = horizons[name]["probability"]
+            else:
+                fk = fit_rows(Xk, y, len(Xk))
+                p_now = float(fk.predict_proba(Xk.iloc[[-1]])[:, 1][0]) if fk is not None else float("nan")
+            base_rate = horizons[name]["baseRate"]
+            hist_k = wf[k][name].dropna()
+            entry["horizons"][name] = {
+                "probability": p_now, "ratio": p_now / base_rate if base_rate else None,
+                "level": level_for(p_now, base_rate),
+                "percentile": float((hist_k <= p_now).mean()) if len(hist_k) else None,
+                "evaluation": scores(wf[k][name], y), "calibration": calibration(wf[k][name], y),
+            }
+            if k != "main":
+                history[f"p_{name}_{k}"] = [None if pd.isna(v) else round(float(v), 4) for v in wf[k][name][keep]]
+        side[k] = entry
+        log(f"  {cfg['models'][k]['label']}: " + "; ".join(
+            f"{n} today {e['probability']:.3f}, AUC {e['evaluation'].get('auc', float('nan')):.3f}" for n, e in entry["horizons"].items()))
+
     # full out-of-sample record for scripts/backtest.py (the website's history is trimmed to a few years)
     ev_mask = X.index >= pd.Timestamp(cfg["eval_start"])
     oos = {"asof": asof.strftime("%Y-%m-%d"), "evalStart": cfg["eval_start"],
            "baseRates": {name: horizons[name]["baseRate"] for name in horizons},
+           "models": {k: side[k]["label"] for k in side},
            "dates": [d.strftime("%Y-%m-%d") for d in X.index[ev_mask]],
            "spx": [round(float(v), 2) for v in spx_f[ev_mask]]}
+    prefix = {"main": "p_", "vol": "b_", "vix": "v_"}
     for name in cfg["horizons"]:
-        oos[f"p_{name}"] = [None if pd.isna(v) else round(float(v), 4) for v in wf["model"][name][ev_mask]]
-        oos[f"b_{name}"] = [None if pd.isna(v) else round(float(v), 4) for v in wf["baseline"][name][ev_mask]]
+        for k in models:
+            if k in prefix:
+                oos[f"{prefix[k]}{name}"] = [None if pd.isna(v) else round(float(v), 4) for v in wf[k][name][ev_mask]]
         oos[f"y_{name}"] = [None if pd.isna(v) else int(v) for v in labels[name][ev_mask]]
     DATA.mkdir(parents=True, exist_ok=True)
     (DATA / "model_oos.json").write_text(json.dumps(oos, separators=(",", ":")))
@@ -483,8 +571,11 @@ def build_model(cfg: dict = CONFIG) -> dict:
                             ("XSec_Vol", "Dispersion of daily returns across stocks", "pct")]:
         v = float(br[key].iloc[-1])
         internals.append({"key": key, "label": label, "value": v, "format": fmt, "percentile": pctile(br[key], v)})
-    for key, s, fmt in [("InternalTurbulence", it["InternalTurbulence"], "z"), ("TurbScalar", F["TurbScalar"], "num"),
-                        ("RV21", prep["rv"].loc[:asof], "pct")]:
+    extra = [("InternalTurbulence", it["InternalTurbulence"], "z"), ("TurbScalar", F["TurbScalar"], "num"),
+             ("RV21", prep["rv"].loc[:asof], "pct")]
+    if prep.get("vix") is not None and prep["vix"].loc[:asof].notna().any():
+        extra.append(("VIX", prep["vix"].loc[:asof], "num"))
+    for key, s, fmt in extra:
         v = float(s.dropna().iloc[-1])
         internals.append({"key": key, "label": FEATURE_INFO[key][0], "value": v, "format": fmt, "percentile": pctile(s, v)})
 
@@ -493,6 +584,7 @@ def build_model(cfg: dict = CONFIG) -> dict:
         "asof": asof.strftime("%Y-%m-%d"),
         "spxClose": float(spx.loc[asof]),
         "horizons": horizons,
+        "models": side,
         "history": history,
         "internals": internals,
         "indicators": {"internalTurbulence": pairs(it["InternalTurbulence"].loc[start_hist:], 3),
