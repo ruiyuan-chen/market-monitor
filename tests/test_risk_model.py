@@ -90,7 +90,9 @@ def test_walk_forward_uses_only_past_labels(monkeypatch):
     monkeypatch.setattr(rm, "fit_rows", spy_fit)
     cfg = dict(rm.CONFIG, eval_start=str(idx[250].date()), refit_every=21)
     wf = rm.walk_forward({}, {"5d": y}, cfg, idx)
-    p = wf["model"]["5d"]
+    p = wf["main"]["5d"]
+    assert "vix" not in wf or wf["vix"]["5d"].isna().all()       # no VIX column in this test, so no VIX model
+    assert wf["vol"]["5d"].iloc[250:].notna().all()               # the volatility benchmark runs alongside
     assert p.iloc[:250].isna().all() and p.iloc[250:].notna().all()
     starts = range(250, n, 21)
     assert sorted(set(seen)) == sorted({max(0, i - 5) for i in starts})
@@ -101,3 +103,10 @@ def test_level_labels():
     assert rm.level_for(0.15, 0.15) == "Normal"
     assert rm.level_for(0.25, 0.15) == "Elevated"
     assert rm.level_for(0.40, 0.15) == "High"
+
+
+def test_model_registry_features():
+    cfg = rm.CONFIG
+    assert rm.model_features(cfg, "main") == list(cfg["features"])
+    assert rm.model_features(cfg, "vix") == ["VIX"] and rm.model_features(cfg, "vol") == ["RV21"]
+    assert set(cfg["models"]) == {"main", "vix", "vol"}
