@@ -179,17 +179,6 @@
     },
   });
 
-  Chart.register({
-    id: "mmBarLabels",
-    afterDatasetsDraw(chart, args, opts) {
-      if (!opts || !opts.format) return;
-      const c = chart.ctx, meta = chart.getDatasetMeta(0);
-      c.save(); c.font = `12px ${css("--font-sans")}`; c.fillStyle = css("--ink-2"); c.textBaseline = "middle";
-      meta.data.forEach((bar, i) => c.fillText(opts.format(chart.data.datasets[0].data[i]), bar.x + 6, bar.y));
-      c.restore();
-    },
-  });
-
   // calendar-aligned ticks for a linear time axis
   function timeTicks(min, max) {
     const years = (max - min) / (864e5 * 365.25);
@@ -561,7 +550,7 @@
 
   function renderFirms(f) {
     const tbox = $("#firm-table");
-    if (!f || !f.firms || !f.firms.length) { emptyState(tbox); $("#mcap-box").closest(".panel").hidden = true; return; }
+    if (!f || !f.firms || !f.firms.length) { emptyState(tbox); return; }
     const firms = f.firms;
     const sumTop = (n) => firms.slice(0, n).reduce((s, r) => s + (r.marketCap || 0), 0);
     const pes = firms.map((r) => r.trailingPE).filter((v) => ok(v) && v > 0).sort((a, b) => a - b);
@@ -605,29 +594,6 @@
       tbox.replaceChildren(el("table", null, el("thead", null, head), body));
     }
     draw();
-
-    // market-cap bars
-    const mbox = $("#mcap-box");
-    mbox.style.height = `${firms.length * 24 + 36}px`;
-    const build = () => new Chart($("#mcap-chart"), {
-      type: "bar",
-      data: { labels: firms.map((r) => r.symbol), datasets: [{ label: "Market cap", data: firms.map((r) => r.marketCap / 1e12), backgroundColor: css("--s1"), hoverBackgroundColor: css("--accent-ink"), borderRadius: 3, borderSkipped: "start", maxBarThickness: 16, categoryPercentage: 0.8, barPercentage: 0.9 }] },
-      options: {
-        indexAxis: "y", animation: false, responsive: true, maintainAspectRatio: false,
-        layout: { padding: { right: 56 } },
-        scales: {
-          x: { beginAtZero: true, grid: { color: css("--grid") }, border: { display: false }, ticks: { callback: (v) => "$" + v + "T", maxTicksLimit: 6 } },
-          y: { grid: { display: false }, border: { color: css("--axis") }, ticks: { color: css("--ink-2") } },
-        },
-        plugins: {
-          legend: { display: false }, mmCrosshair: { enabled: false },
-          mmBarLabels: { format: (v) => "$" + v.toFixed(2) + "T" },
-          tooltip: Object.assign(tooltipStyle(), { usePointStyle: false, displayColors: false, callbacks: { title: (it) => firms[it[0].dataIndex].name, label: (it) => `${fmtCap(firms[it.dataIndex].marketCap)} market cap` } }),
-        },
-      },
-    });
-    let chart = build();
-    redrawers.push(() => { chart.destroy(); chart = build(); });
   }
 
   // ---- rates
@@ -757,14 +723,6 @@
     });
   }
 
-  function renderCross(m) {
-    const box = $("#cross-table");
-    if (!m || !m.cross || !m.cross.length) { emptyState(box); return; }
-    const dec = { "EURUSD=X": 4, "BTC-USD": 0 };
-    const draw = () => quoteTable(box, m.cross, (q) => dec[q.symbol] ?? 2, (q) => q.unit);
-    draw(); redrawers.push(draw);
-  }
-
   function renderValuation(v, mc) {
     const list = $("#val-stats");
     if (!v || !v.cape || !v.cape.length) { emptyState(list); $("#cape-chart").closest(".panel").hidden = true; return; }
@@ -885,16 +843,13 @@
     const box = $("#risk-models");
     if (!mdl || !mdl.horizons || !mdl.history) {
       emptyState(box, "The models' first run hasn't finished yet. Results appear here after the next automatic update.");
-      ["#risk-chart", "#risk-score", "#risk-drivers", "#bt-chart", "#risk-calib"].forEach((s) => { const p = $(s) && $(s).closest(".panel"); if (p) p.hidden = true; });
+      ["#risk-chart", "#risk-score", "#risk-drivers", "#bt-chart"].forEach((s) => { const p = $(s) && $(s).closest(".panel"); if (p) p.hidden = true; });
       return;
     }
     const H = mdl.horizons, keys = Object.keys(H), asof = ts(mdl.asof), M = modelsOf(mdl);
     const evalStart = (mdl.model && mdl.model.evalStart) || mdl.history.dates[0];
     const BT = bt && bt.horizons && Object.keys(bt.horizons).length ? bt.horizons : null;
-    let cur = bindRange("riskh", (r) => { cur = r; drawToday(); chart.rebuild(); drawScore(); drawCalib(); drawDrivers(); if (btChart) btChart.rebuild(); drawBt(); }) || keys[0];
-    let calibModel = bindRange("calibm", (r) => { calibModel = r; drawCalib(); }) || "main";
-    // hide calibration buttons for models that aren't in the data
-    document.querySelectorAll('[data-range="calibm"] button').forEach((b) => { if (!M.some((m) => m.key === b.dataset.r)) b.hidden = true; });
+    let cur = bindRange("riskh", (r) => { cur = r; drawToday(); chart.rebuild(); drawScore(); drawDrivers(); if (btChart) btChart.rebuild(); drawBt(); }) || keys[0];
     if (mdl.sample) { const n = $("#risk-notice"); n.hidden = false; n.textContent = `Preview: these results come from your sample file, which ends on ${fmtDate(asof)}. On the live site they update every trading day.`; }
     $("#risk-sub").textContent = `Estimated after the close on ${fmtDate(asof)} · S&P 500 at ${fmtNum(mdl.spxClose, 2)} · chance of a ${Math.round(Math.abs(H[keys[0]].threshold) * 100)}% or larger drop`;
     const th = (t, cls) => el("th", { class: cls || null, scope: "col" }, t);
@@ -998,20 +953,6 @@
     }
     drawScore();
 
-    // ---- calibration, for the chosen model
-    function drawCalib() {
-      const m = M.find((x) => x.key === calibModel) || M[0];
-      const rows = ((m.horizons || {})[cur] || {}).calibration || (m.key === "main" ? H[cur].calibration : null) || [];
-      $("#calib-sub").textContent = `${m.label}, ${H[cur].days}-day horizon: when its estimate fell in each range, how often a drawdown followed`;
-      $("#risk-calib").replaceChildren(rows.length ? el("table", null,
-        el("thead", null, el("tr", null, th("Estimate"), th("Days", "n"), th("Avg. estimate", "n"), th("Drawdown followed", "n"))),
-        el("tbody", null, rows.map((r) => el("tr", null,
-          el("td", null, `${Math.round(r.from * 100)}–${Math.round(r.to * 100)}%`),
-          el("td", { class: "n" }, fmtNum(r.days, 0)), el("td", { class: "n" }, pct1(r.predicted)), el("td", { class: "n strong" }, pct1(r.observed)))))) :
-        el("div", { class: "empty" }, "No calibration data for this model yet."));
-    }
-    drawCalib();
-
     // ---- trading on each model
     const btChart = BT ? managed({
       canvasId: "bt-chart", legendId: "bt-legend", csvName: "model_trading_rules", grain: "day", yFmtCsv: (v) => fmtNum(v, 2),
@@ -1058,15 +999,6 @@
       $("#bt-foot").replaceChildren(...foot);
     }
     drawBt();
-
-    // ---- internals
-    const fmtI = (x) => (x.key === "TurbScalar" ? fmtNum(x.value * 100, 2) + "%" : x.key === "VIX" ? fmtNum(x.value, 1) : x.format === "pct" ? fmtNum(x.value * 100, 1) + "%" : x.format === "z" ? signed(x.value, 2) : Math.abs(x.value) < 0.1 ? x.value.toFixed(4) : fmtNum(x.value, 2));
-    $("#risk-internals").replaceChildren(el("table", null,
-      el("thead", null, el("tr", null, th("Measure"), th("Latest", "n"), th("Percentile vs. history"))),
-      el("tbody", null, (mdl.internals || []).map((x) => el("tr", null,
-        el("td", { style: "white-space:normal" }, x.label),
-        el("td", { class: "n strong" }, fmtI(x)),
-        el("td", null, ok(x.percentile) ? el("span", { class: "pbar" }, el("span", { class: "track" }, el("i", { style: `width:${(x.percentile * 100).toFixed(0)}%` })), `${Math.round(x.percentile * 100)}th`) : "–"))))));
   }
 
   const FACTOR_INFO = {
@@ -1223,7 +1155,6 @@
     run("#firm-table", renderFirms, firms);
     run("#rate-table", renderRates, macro);
     run("#macro-table", renderEconomy, macro);
-    run("#cross-table", renderCross, markets);
     run("#val-stats", renderValuation, valuation, macro);
     run("#factor-table", renderFactors, factors);
     // redraw charts once the web fonts arrive so axis labels use them
