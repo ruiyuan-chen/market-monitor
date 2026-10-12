@@ -1,6 +1,6 @@
 # Market Monitor
 
-A free, self-updating website about the U.S. stock market, written for students. It covers:
+A free, self-updating website about the U.S. stock market. Each tab is its own page:
 
 - **Overview**: S&P 500, Nasdaq, Dow, Russell 2000 and VIX, plus an S&P 500 chart with its 200-day average, drawdown from the record high, and realized vs. implied volatility
 - **Sectors**: heatmap of the 11 S&P 500 sectors (1 day to 1 year)
@@ -10,9 +10,10 @@ A free, self-updating website about the U.S. stock market, written for students.
 - **Cross-asset**: oil, gold, the dollar index, EUR/USD and Bitcoin
 - **Valuation**: Shiller CAPE since 1881, earnings yield and excess CAPE yield
 - **Factors**: Fama-French 5 factors + momentum, with growth-of-$1 charts
-- **Risk model**: Ryan Chen's drawdown-risk model, retrained every day. It shows today's probability of a 3%+ S&P 500 drop within 5 and 21 trading days, an out-of-sample track record and scorecard, what drives the reading, and the author's evaluation
+- **Risk models** (the last tab): Ryan Chen's turbulence model and two benchmarks, the VIX alone and realized volatility alone, retrained every day and tested the same way. For each model it shows today's probability of a 3%+ S&P 500 drop within 5 and 21 trading days, an out-of-sample track record and scorecard, calibration, and what $10,000 would have become trading on it, next to buy and hold. It also shows what drives the turbulence model's reading and the author's evaluation
+- **About the data** (linked in the header and footer): sources, schedule and the status of the last update
 
-Every section has a **Learn** panel explaining the numbers. Every chart has a **data table and CSV download**.
+Every section has a **Teaching notes** panel explaining the numbers. Every chart has a **data table and CSV download**.
 
 ## How it works
 
@@ -20,7 +21,7 @@ Every section has a **Learn** panel explaining the numbers. Every chart has a **
 GitHub Actions (weekdays, 5:30 pm ET)
   └─ scripts/update_data.py ── Yahoo Finance · FRED · Shiller · Ken French
         └─ data/*.json ── committed to the repo
-              └─ index.html + assets/ ── published on GitHub Pages
+              └─ index.html, sectors.html, … risk.html + assets/ ── published on GitHub Pages
 ```
 
 No server, no database and no paid API. If one source fails, that section keeps its previous data and the
@@ -59,6 +60,8 @@ No server, no database and no paid API. If one source fails, that section keeps 
   <https://fred.stlouisfed.org/docs/api/api_key.html>, then go to **Settings → Secrets and variables →
   Actions → New repository secret**, name it `FRED_API_KEY` and paste the key.
 - **Personalize:** edit `assets/js/config.js` (title, your name, link to your academic site, course name).
+- **Tabs:** the list at the top of `assets/js/shell.js` sets the tab names and their order. To drop a tab, remove
+  its line there and delete its HTML file.
 - **Change what's tracked:** the lists at the top of `scripts/update_data.py` (indices, sector funds,
   cross-asset tickers, the candidate pool for the "Largest firms" ranking, FRED series).
 - **Link it from your academic site**, e.g. a "Market Monitor" item in the Teaching page.
@@ -69,9 +72,11 @@ No server, no database and no paid API. If one source fails, that section keeps 
 
 | Path | What it is |
 |---|---|
-| `index.html` | The page, including all the **Learn** text (edit freely) |
+| `index.html` | The Overview page (the site's home page) |
+| `sectors.html`, `firms.html`, `rates.html`, `economy.html`, `cross-asset.html`, `valuation.html`, `factors.html`, `risk.html`, `about.html` | One page per tab, each with its own **Teaching notes** text (edit freely) |
+| `assets/js/shell.js` | The header, tab bar and footer shared by every page |
 | `assets/css/style.css` | Styles. Colors and fonts are variables at the top (navy masthead, green gains, red losses) |
-| `assets/js/app.js` | Draws the tables and charts from `data/*.json` |
+| `assets/js/app.js` | Draws the tables and charts on each page from `data/*.json` |
 | `assets/js/config.js` | Site title, maintainer name and links |
 | `assets/vendor/chart.umd.min.js` | Chart.js 4.5.1 (MIT license), bundled so the site has no outside dependencies |
 | `scripts/update_data.py` | Downloads and processes the data |
@@ -79,7 +84,8 @@ No server, no database and no paid API. If one source fails, that section keeps 
 | `model/universe.txt` | The ~490 stock tickers the model uses (one per line) |
 | `content/commentary.md` | **Your evaluation**, shown beside the model's signal. Edit it on GitHub whenever you like |
 | `data/model_log.json` | Append-only record of each day's live prediction, scored once the outcome is known |
-| `data/model_oos.json` | Every out-of-sample prediction since 2020 (model and volatility baseline), used by the backtest |
+| `data/model_oos.json` | Every out-of-sample prediction since 2020 for each model, used by the backtests |
+| `data/backtest.json` | What trading on each model would have done (the Risk models page reads it) |
 | `data/*.json` | The data the page reads (written by the workflow; don't edit by hand) |
 | `.github/workflows/update.yml` | The schedule: fetch → commit → publish |
 | `scripts/model_experiment.py` | Compares model variants (feature sets, history length) out of sample; run from Actions |
@@ -104,6 +110,11 @@ shows the code, only the results.
    *Realized volatility* (RV21): the annualized standard deviation of the last 21 daily S&P 500 returns.
 4. Target: the S&P 500 closes at least 3% below today's close within the next 5 (or 21) trading days.
 5. Logistic regression, refit every day on all labeled history.
+6. Two benchmarks, fit the same way on the same days: the VIX alone, and realized volatility alone
+   (`CONFIG["models"]`). The page shows all three side by side.
+7. A trading test for each model (`scripts/backtest.py`, run as the "backtest" step of the daily update):
+   hold SPY and move to cash at the close whenever the model reads High, at least twice the usual rate.
+   Trading costs, taxes and a bootstrap range for the gap to buy and hold are included.
 
 The feature code was checked against a re-run of the notebook on `stock_details_5_years.csv`: cluster
 returns, turbulence signals, breadth measures and internal turbulence match to machine precision.
