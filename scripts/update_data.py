@@ -828,6 +828,13 @@ def build_risk_model() -> dict:
     return risk_model.build_model()
 
 
+def build_backtest() -> dict:
+    """Simple trading rules on the risk models' out-of-sample predictions (scripts/backtest.py).
+    Reads data/model_oos.json, which the "model" section writes just before."""
+    import backtest
+    return backtest.site_backtest()
+
+
 SECTIONS = {
     "markets": build_markets,
     "firms": build_firms,
@@ -835,6 +842,7 @@ SECTIONS = {
     "valuation": build_valuation,
     "factors": build_factors,
     "model": build_risk_model,
+    "backtest": build_backtest,
 }
 
 
