@@ -92,6 +92,8 @@ No server, no database and no paid API. If one source fails, that section keeps 
 | `.github/workflows/experiment.yml` | The manual **Model experiment** workflow |
 | `scripts/backtest.py` | Simulates simple trading rules on the model's out-of-sample predictions; run from Actions |
 | `.github/workflows/backtest.yml` | The manual **Strategy backtest** workflow |
+| `scripts/threshold_experiment.py` | Compares drop sizes (for example 3% vs 2%) for the three models: accuracy and trading; run from Actions |
+| `.github/workflows/threshold.yml` | The manual **Drop-size experiment** workflow |
 | `tests/` | Offline tests for the data parsers and the model |
 
 ## Risk model
@@ -146,6 +148,8 @@ RISK_MODEL_PRICES_CSV=stock_details_5_years.csv RISK_MODEL_SPX_CSV=spx.csv pytho
 **Experiments.** To compare variants without touching the site, open **Actions → Model experiment → Run workflow**. By default it tests the notebook's features, the live model (with RV21), adding the VIX, and VIX or RV21 alone, first on the live setup (daily data since 2016, tested from 2020) and then on a longer history (daily data since 2003, tested from 2008). The results table, with block-bootstrap ranges for each AUC difference, appears on the run's summary page after about 15–20 minutes. Edit `VARIANTS` in `scripts/model_experiment.py` to try other features.
 
 **Strategy backtest.** To see what trading on the model would have done, open **Actions → Strategy backtest → Run workflow** (after the daily update has run at least once). It simulates buy and hold, the model's risk levels as in-or-out and scaled-exposure rules, the volatility-only model, VIX thresholds and volatility targeting, all long-only with trading costs and a simple tax treatment, and reports returns, drawdowns, trade counts and a bootstrap range for each rule's gap to buy and hold. The results appear on the run's summary page in about two minutes; the chart and daily series are in the run's artifact. The cost, tax rate and volatility target are inputs on the Run workflow form. This is a study tool, not investment advice.
+
+**Drop-size experiment.** To see whether the models do better with a different drop size, open **Actions → Drop-size experiment → Run workflow**. It retrains the three models with labels built from each drop size (default 3% and 2%), on the same days, and reports AUC, Brier skill and two trading rules for each, on the live setup and on a longer history from 2003. The results appear on the run's summary page after about 15 minutes. The drop sizes are an input on the Run workflow form.
 
 **Your evaluation** lives in `content/commentary.md`. On GitHub, open the file, click the pencil icon,
 edit, and commit. The site picks it up within a minute. It supports a `# Title` line, an
