@@ -1,0 +1,41 @@
+name: Drop-size experiment
+
+# Manual only: Actions -> Drop-size experiment -> Run workflow. Compares how well the three risk models
+# predict drops of different sizes (for example 3% vs 2%) and what trading on each would have done.
+# Results go to the run's summary page. It does not change the website or the data.
+on:
+  workflow_dispatch:
+    inputs:
+      drops:
+        description: "Drop sizes to compare, in percent, comma-separated"
+        default: "3,2"
+      runs:
+        description: "history_start:test_start pairs, comma-separated"
+        default: "2016-01-01:2020-01-01,2003-01-01:2008-01-01"
+
+permissions:
+  contents: read
+
+jobs:
+  experiment:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Compare drop sizes
+        env:
+          FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+          EXPERIMENT_DROPS: ${{ inputs.drops }}
+          EXPERIMENT_RUNS: ${{ inputs.runs }}
+        run: python scripts/threshold_experiment.py
